@@ -17,19 +17,129 @@ const app = express();
 const port = process.env.PORT || 4000;
 const upload = multer({
   dest: uploadsDir,
-  limits: { fileSize: 8 * 1024 * 1024, files: 12 },
+  limits: { fileSize: 8 * 1024 * 1024, files: 50 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
     else cb(new Error('Only image uploads are allowed.'));
   }
 });
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
+const allowedOrigins = (process.env.CLIENT_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    const isLocalDev = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+    if (isLocalDev || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS origin not allowed: ${origin}`));
+  }
+}));
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let index = 0; index < 8; index += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function dosDateTime(date = new Date()) {
+  const year = Math.max(date.getFullYear(), 1980);
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const day = (year - 1980) << 9 | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, day };
+}
+
+function writeUInt16(value) {
+  const buffer = Buffer.alloc(2);
+  buffer.writeUInt16LE(value);
+  return buffer;
+}
+
+function writeUInt32(value) {
+  const buffer = Buffer.alloc(4);
+  buffer.writeUInt32LE(value);
+  return buffer;
+}
+
+function safeZipName(name) {
+  return String(name || 'photo').replace(/[\\/:*?"<>|]/g, '-');
+}
+
+function createZip(files) {
+  const chunks = [];
+  const centralDirectory = [];
+  let offset = 0;
+  const { time, day } = dosDateTime();
+
+  files.forEach((file, index) => {
+    const data = fs.readFileSync(file.path);
+    const name = Buffer.from(file.zipName || `${String(index + 1).padStart(2, '0')}-${safeZipName(file.name)}`);
+    const checksum = crc32(data);
+    const localHeader = Buffer.concat([
+      writeUInt32(0x04034b50),
+      writeUInt16(20),
+      writeUInt16(0),
+      writeUInt16(0),
+      writeUInt16(time),
+      writeUInt16(day),
+      writeUInt32(checksum),
+      writeUInt32(data.length),
+      writeUInt32(data.length),
+      writeUInt16(name.length),
+      writeUInt16(0),
+      name
+    ]);
+
+    chunks.push(localHeader, data);
+    centralDirectory.push(Buffer.concat([
+      writeUInt32(0x02014b50),
+      writeUInt16(20),
+      writeUInt16(20),
+      writeUInt16(0),
+      writeUInt16(0),
+      writeUInt16(time),
+      writeUInt16(day),
+      writeUInt32(checksum),
+      writeUInt32(data.length),
+      writeUInt32(data.length),
+      writeUInt16(name.length),
+      writeUInt16(0),
+      writeUInt16(0),
+      writeUInt16(0),
+      writeUInt16(0),
+      writeUInt32(0),
+      writeUInt32(offset),
+      name
+    ]));
+    offset += localHeader.length + data.length;
+  });
+
+  const centralStart = offset;
+  const centralBuffer = Buffer.concat(centralDirectory);
+  const end = Buffer.concat([
+    writeUInt32(0x06054b50),
+    writeUInt16(0),
+    writeUInt16(0),
+    writeUInt16(files.length),
+    writeUInt16(files.length),
+    writeUInt32(centralBuffer.length),
+    writeUInt32(centralStart),
+    writeUInt16(0)
+  ]);
+
+  return Buffer.concat([...chunks, centralBuffer, end]);
+}
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   const user = get('SELECT * FROM users WHERE email = ?', [String(email || '').toLowerCase()]);
@@ -80,10 +190,11 @@ app.get('/api/price-sections', requireAuth, (_req, res) => {
 app.get('/api/appointments', requireAuth, (req, res) => {
   const assessorId = req.user.role === 'administrator' && req.query.assessorId ? Number(req.query.assessorId) : req.user.id;
   const rows = all(`
-    SELECT a.*, u.name AS assessor_name, c.name AS client_name
+    SELECT a.*, u.name AS assessor_name, c.name AS client_name, q.id AS quote_id, q.quote_number
     FROM appointments a
     JOIN users u ON u.id = a.assessor_id
     LEFT JOIN clients c ON c.id = a.client_id
+    LEFT JOIN quotes q ON q.appointment_id = a.id
     WHERE a.assessor_id = ?
     ORDER BY a.appointment_start
   `, [assessorId]);
@@ -134,6 +245,31 @@ app.get('/api/quotes', requireAuth, (req, res) => {
   res.json(rows);
 });
 
+app.get('/api/quotes/:id/photos.zip', requireAuth, requireRole('administrator'), (req, res) => {
+  const quote = get('SELECT id, quote_number, customer_name FROM quotes WHERE id = ?', [req.params.id]);
+  if (!quote) return res.status(404).json({ error: 'Quote not found.' });
+
+  const photos = all('SELECT * FROM quote_photos WHERE quote_id = ? ORDER BY id', [quote.id]);
+  if (photos.length === 0) return res.status(404).json({ error: 'This quote has no photos to download.' });
+
+  const quoteZipName = safeZipName(quote.quote_number || `Quote-${quote.id}`);
+  const files = photos
+    .map((photo, index) => ({
+      name: photo.original_name,
+      zipName: `${String(index + 1).padStart(2, '0')}-${safeZipName(photo.original_name)}`,
+      path: path.join(uploadsDir, photo.file_name)
+    }))
+    .filter((photo) => fs.existsSync(photo.path));
+
+  if (files.length === 0) return res.status(404).json({ error: 'The photo files could not be found on disk.' });
+
+  const zip = createZip(files);
+  const fileName = `${quoteZipName}-photos.zip`;
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.setHeader('Content-Length', zip.length);
+  res.send(zip);
+});
 app.get('/api/quotes/:id', requireAuth, (req, res) => {
   const quote = get(`
     SELECT q.*, u.name AS assessor_name
@@ -151,7 +287,7 @@ app.get('/api/quotes/:id', requireAuth, (req, res) => {
   res.json(quote);
 });
 
-app.post('/api/quotes', requireAuth, requireRole('assessor'), upload.array('photos', 12), (req, res) => {
+app.post('/api/quotes', requireAuth, requireRole('assessor'), upload.array('photos', 50), (req, res) => {
   const payload = JSON.parse(req.body.payload || '{}');
   const items = Array.isArray(payload.items) ? payload.items : [];
   if (!payload.appointmentId || items.length === 0) {
@@ -211,7 +347,7 @@ app.post('/api/quotes', requireAuth, requireRole('assessor'), upload.array('phot
   }
 });
 
-app.put('/api/quotes/:id', requireAuth, requireRole('assessor'), upload.array('photos', 12), (req, res) => {
+app.put('/api/quotes/:id', requireAuth, requireRole('assessor'), upload.array('photos', 50), (req, res) => {
   const quote = get('SELECT * FROM quotes WHERE id = ?', [req.params.id]);
   if (!quote) return res.status(404).json({ error: 'Quote not found.' });
   if (quote.assessor_id !== req.user.id) return res.status(403).json({ error: 'You can only edit your own quotes.' });
@@ -261,3 +397,25 @@ app.put('/api/quotes/:id', requireAuth, requireRole('assessor'), upload.array('p
 app.listen(port, () => {
   console.log(`MRS Quotes API running on http://localhost:${port}`);
 });
+
+app.use((error, _req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    const messages = {
+      LIMIT_FILE_COUNT: 'You can upload a maximum of 50 photos per quote.',
+      LIMIT_FILE_SIZE: 'Each photo must be 8MB or smaller.',
+      LIMIT_UNEXPECTED_FILE: 'Only quote photos can be uploaded here.'
+    };
+    return res.status(400).json({ error: messages[error.code] || error.message });
+  }
+  if (error?.message === 'Only image uploads are allowed.') {
+    return res.status(400).json({ error: error.message });
+  }
+  next(error);
+});
+
+
+
+
+
+
+

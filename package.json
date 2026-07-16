@@ -13,6 +13,11 @@
     "seed:rates": "node server/scripts/importRates.js"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.2.0",
+    "@mui/material": "^9.2.0",
+    "@mui/x-data-grid": "^9.9.0",
     "@vitejs/plugin-react": "^5.0.0",
     "bcryptjs": "^3.0.2",
     "concurrently": "^9.2.0",
@@ -25,6 +30,5 @@
     "react-dom": "^19.1.1",
     "vite": "^7.0.6",
     "xlsx": "^0.18.5"
-  },
-  "devDependencies": {}
+  }
 }
