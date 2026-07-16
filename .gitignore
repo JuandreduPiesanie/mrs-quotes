@@ -1,0 +1,7 @@
+node_modules/
+dist/
+server/data/
+server/uploads/
+.env
+.env.local
+npm-debug.log*
