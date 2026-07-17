@@ -5,7 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
-import { initDb, all, get, run, db, formatQuoteNumber } from './db.js';
+import { initDb, all, get, run, db, formatQuoteNumber, ROLES } from './db.js';
 import { requireAuth, requireRole, signUser } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -140,6 +140,12 @@ function createZip(files) {
 
   return Buffer.concat([...chunks, centralBuffer, end]);
 }
+function canAccessQuote(user, quote) {
+  if (user.role === ROLES.MANAGEMENT) return true;
+  if (user.role === ROLES.ASSESSOR) return quote.assessor_id === user.id;
+  if (user.role === ROLES.QUOTE_ADMINISTRATOR) return quote.quote_administrator_id === user.id;
+  return false;
+}
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   const user = get('SELECT * FROM users WHERE email = ?', [String(email || '').toLowerCase()]);
@@ -154,10 +160,24 @@ app.post('/api/auth/login', (req, res) => {
 
 app.get('/api/me', requireAuth, (req, res) => res.json({ user: req.user }));
 
-app.get('/api/users/assessors', requireAuth, requireRole('administrator'), (_req, res) => {
-  res.json(all('SELECT id, name, email FROM users WHERE role = ? ORDER BY name', ['assessor']));
+app.get('/api/users/assessors', requireAuth, requireRole(ROLES.SCHEDULE_ADMINISTRATOR, ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT), (req, res) => {
+  const params = [ROLES.ASSESSOR];
+  const assignedFilter = req.user.role === ROLES.QUOTE_ADMINISTRATOR ? 'AND u.quote_administrator_id = ?' : '';
+  if (req.user.role === ROLES.QUOTE_ADMINISTRATOR) params.push(req.user.id);
+
+  res.json(all(`
+    SELECT u.id, u.name, u.email, u.quote_administrator_id, qa.name AS quote_administrator_name
+    FROM users u
+    LEFT JOIN users qa ON qa.id = u.quote_administrator_id
+    WHERE u.role = ? ${assignedFilter}
+    ORDER BY u.name
+  `, params));
 });
-app.get('/api/clients', requireAuth, requireRole('administrator'), (req, res) => {
+
+app.get('/api/users/quote-administrators', requireAuth, requireRole(ROLES.SCHEDULE_ADMINISTRATOR, ROLES.MANAGEMENT), (_req, res) => {
+  res.json(all('SELECT id, name, email FROM users WHERE role = ? ORDER BY name', [ROLES.QUOTE_ADMINISTRATOR]));
+});
+app.get('/api/clients', requireAuth, requireRole(ROLES.SCHEDULE_ADMINISTRATOR, ROLES.MANAGEMENT), (req, res) => {
   const search = String(req.query.search || '').trim();
   const params = search ? [`%${search}%`] : [];
   const where = search ? 'WHERE active = 1 AND name LIKE ?' : 'WHERE active = 1';
@@ -169,7 +189,7 @@ app.get('/api/price-items', requireAuth, (req, res) => {
   const params = group ? [group] : [];
   const where = group ? 'WHERE active = 1 AND quote_group = ?' : 'WHERE active = 1';
   const items = all(`
-    SELECT id, section, category, quote_group, item_code, description, unit, ${req.user.role === 'administrator' ? 'rate' : 'NULL AS rate'}
+    SELECT id, section, category, quote_group, item_code, description, unit, ${[ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT].includes(req.user.role) ? 'rate' : 'NULL AS rate'}
     FROM price_items
     ${where}
     ORDER BY category, description
@@ -188,66 +208,127 @@ app.get('/api/price-sections', requireAuth, (_req, res) => {
 });
 
 app.get('/api/appointments', requireAuth, (req, res) => {
-  const assessorId = req.user.role === 'administrator' && req.query.assessorId ? Number(req.query.assessorId) : req.user.id;
+  if (req.user.role === ROLES.QUOTE_ADMINISTRATOR || req.user.role === ROLES.MANAGEMENT) {
+    const params = [];
+    const quoteAdminFilter = req.user.role === ROLES.QUOTE_ADMINISTRATOR
+      ? 'AND assessor.quote_administrator_id = ?'
+      : '';
+    if (req.user.role === ROLES.QUOTE_ADMINISTRATOR) params.push(req.user.id);
+
+    const rows = all(`
+      SELECT
+        q.id AS quote_id,
+        q.quote_number,
+        q.customer_name,
+        q.site_address,
+        q.request_details,
+        q.created_at AS appointment_start,
+        q.created_at AS appointment_end,
+        q.status,
+        q.subtotal,
+        assessor.id AS assessor_id,
+        assessor.name AS assessor_name,
+        qa.id AS quote_administrator_id,
+        qa.name AS quote_administrator_name,
+        c.name AS client_name,
+        'quote_task' AS calendar_type
+      FROM quotes q
+      JOIN users assessor ON assessor.id = q.assessor_id
+      LEFT JOIN users qa ON qa.id = assessor.quote_administrator_id
+      LEFT JOIN clients c ON c.id = q.client_id
+      WHERE q.status = 'submitted' ${quoteAdminFilter}
+      ORDER BY q.created_at
+    `, params);
+    return res.json(rows);
+  }
+
+  const params = [];
+  let where = "WHERE a.status = 'scheduled'";
+  if (req.user.role === ROLES.ASSESSOR) {
+    where += ' AND a.assessor_id = ?';
+    params.push(req.user.id);
+  } else if (req.query.assessorId) {
+    where += ' AND a.assessor_id = ?';
+    params.push(Number(req.query.assessorId));
+  }
+
   const rows = all(`
-    SELECT a.*, u.name AS assessor_name, c.name AS client_name, q.id AS quote_id, q.quote_number
+    SELECT a.*, u.name AS assessor_name, c.name AS client_name, q.id AS quote_id, q.quote_number, 'appointment' AS calendar_type
     FROM appointments a
     JOIN users u ON u.id = a.assessor_id
     LEFT JOIN clients c ON c.id = a.client_id
     LEFT JOIN quotes q ON q.appointment_id = a.id
-    WHERE a.assessor_id = ?
+    ${where}
     ORDER BY a.appointment_start
-  `, [assessorId]);
+  `, params);
   res.json(rows);
 });
 
-app.post('/api/appointments', requireAuth, requireRole('administrator'), (req, res) => {
+app.post('/api/appointments', requireAuth, requireRole(ROLES.SCHEDULE_ADMINISTRATOR), (req, res) => {
   const { assessorId, clientId, siteAddress, requestDetails, appointmentStart, appointmentEnd } = req.body;
+  const assessor = assessorId ? get('SELECT id FROM users WHERE id = ? AND role = ?', [assessorId, ROLES.ASSESSOR]) : null;
   const client = clientId ? get('SELECT id, name FROM clients WHERE id = ? AND active = 1', [clientId]) : null;
-  if (!assessorId || !client || !siteAddress || !requestDetails || !appointmentStart) {
+  if (!assessor || !client || !siteAddress || !requestDetails || !appointmentStart) {
     return res.status(400).json({ error: 'Assessor, client, address, details, and start time are required.' });
   }
   const result = run(`
     INSERT INTO appointments (assessor_id, client_id, customer_name, site_address, request_details, appointment_start, appointment_end)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [assessorId, client.id, client.name, siteAddress, requestDetails, appointmentStart, appointmentEnd || null]);
+  `, [assessor.id, client.id, client.name, siteAddress, requestDetails, appointmentStart, appointmentEnd || null]);
   res.status(201).json(get('SELECT * FROM appointments WHERE id = ?', [result.lastInsertRowid]));
 });
 app.get('/api/quotes', requireAuth, (req, res) => {
-  const requestedAssessorId = req.user.role === 'administrator' && req.query.assessorId
+  const requestedAssessorId = req.query.assessorId && req.query.assessorId !== 'all'
     ? Number(req.query.assessorId)
     : null;
 
-  if (req.user.role === 'administrator') {
-    const params = requestedAssessorId ? [requestedAssessorId] : [];
-    const where = requestedAssessorId ? 'WHERE q.assessor_id = ?' : '';
-    const rows = all(`
-      SELECT q.*, u.name AS assessor_name, COUNT(p.id) AS photo_count
-      FROM quotes q
-      JOIN users u ON u.id = q.assessor_id
-      LEFT JOIN quote_photos p ON p.quote_id = q.id
-      ${where}
-      GROUP BY q.id
-      ORDER BY q.created_at DESC
-    `, params);
-    return res.json(rows);
+  if (req.user.role === ROLES.SCHEDULE_ADMINISTRATOR) {
+    return res.status(403).json({ error: 'Schedule administrators manage appointments only.' });
   }
 
+  const params = [];
+  const filters = [];
+
+  if (req.user.role === ROLES.ASSESSOR) {
+    filters.push('q.assessor_id = ?');
+    params.push(req.user.id);
+    filters.push("q.status = 'submitted'");
+  } else if (req.user.role === ROLES.QUOTE_ADMINISTRATOR) {
+    filters.push('assessor.quote_administrator_id = ?');
+    params.push(req.user.id);
+    filters.push("q.status = 'submitted'");
+  } else if (req.user.role === ROLES.MANAGEMENT) {
+    filters.push("q.status = 'submitted'");
+  }
+
+  if ([ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT].includes(req.user.role) && requestedAssessorId) {
+    filters.push('q.assessor_id = ?');
+    params.push(requestedAssessorId);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const rows = all(`
-    SELECT q.*, u.name AS assessor_name, COUNT(p.id) AS photo_count
+    SELECT q.*, assessor.name AS assessor_name, qa.name AS quote_administrator_name, COUNT(p.id) AS photo_count
     FROM quotes q
-    JOIN users u ON u.id = q.assessor_id
+    JOIN users assessor ON assessor.id = q.assessor_id
+    LEFT JOIN users qa ON qa.id = assessor.quote_administrator_id
     LEFT JOIN quote_photos p ON p.quote_id = q.id
-    WHERE q.assessor_id = ?
+    ${where}
     GROUP BY q.id
     ORDER BY q.created_at DESC
-  `, [req.user.id]);
+  `, params);
   res.json(rows);
 });
 
-app.get('/api/quotes/:id/photos.zip', requireAuth, requireRole('administrator'), (req, res) => {
-  const quote = get('SELECT id, quote_number, customer_name FROM quotes WHERE id = ?', [req.params.id]);
+app.get('/api/quotes/:id/photos.zip', requireAuth, requireRole(ROLES.QUOTE_ADMINISTRATOR), (req, res) => {
+  const quote = get(`
+    SELECT q.id, q.quote_number, q.customer_name, assessor.quote_administrator_id
+    FROM quotes q
+    JOIN users assessor ON assessor.id = q.assessor_id
+    WHERE q.id = ? AND q.status = 'submitted'
+  `, [req.params.id]);
   if (!quote) return res.status(404).json({ error: 'Quote not found.' });
+  if (!canAccessQuote(req.user, quote)) return res.status(403).json({ error: 'Access denied.' });
 
   const photos = all('SELECT * FROM quote_photos WHERE quote_id = ? ORDER BY id', [quote.id]);
   if (photos.length === 0) return res.status(404).json({ error: 'This quote has no photos to download.' });
@@ -272,13 +353,14 @@ app.get('/api/quotes/:id/photos.zip', requireAuth, requireRole('administrator'),
 });
 app.get('/api/quotes/:id', requireAuth, (req, res) => {
   const quote = get(`
-    SELECT q.*, u.name AS assessor_name
+    SELECT q.*, assessor.name AS assessor_name, assessor.quote_administrator_id, qa.name AS quote_administrator_name
     FROM quotes q
-    JOIN users u ON u.id = q.assessor_id
+    JOIN users assessor ON assessor.id = q.assessor_id
+    LEFT JOIN users qa ON qa.id = assessor.quote_administrator_id
     WHERE q.id = ?
   `, [req.params.id]);
   if (!quote) return res.status(404).json({ error: 'Quote not found.' });
-  if (req.user.role !== 'administrator' && quote.assessor_id !== req.user.id) return res.status(403).json({ error: 'Access denied.' });
+  if (!canAccessQuote(req.user, quote)) return res.status(403).json({ error: 'Access denied.' });
   quote.items = all('SELECT * FROM quote_items WHERE quote_id = ? ORDER BY id', [quote.id]);
   quote.photos = all('SELECT * FROM quote_photos WHERE quote_id = ? ORDER BY id', [quote.id]).map((photo) => ({
     ...photo,
@@ -287,7 +369,29 @@ app.get('/api/quotes/:id', requireAuth, (req, res) => {
   res.json(quote);
 });
 
-app.post('/api/quotes', requireAuth, requireRole('assessor'), upload.array('photos', 50), (req, res) => {
+app.patch('/api/quotes/:id/complete', requireAuth, requireRole(ROLES.QUOTE_ADMINISTRATOR), (req, res) => {
+  const erpQuoteNumber = String(req.body.erpQuoteNumber || '').trim();
+  if (!erpQuoteNumber) return res.status(400).json({ error: 'ERP quote number is required before completing the quote.' });
+
+  const quote = get(`
+    SELECT q.id, q.status, assessor.quote_administrator_id
+    FROM quotes q
+    JOIN users assessor ON assessor.id = q.assessor_id
+    WHERE q.id = ?
+  `, [req.params.id]);
+  if (!quote) return res.status(404).json({ error: 'Quote not found.' });
+  if (!canAccessQuote(req.user, quote)) return res.status(403).json({ error: 'Access denied.' });
+  if (quote.status !== 'submitted') return res.status(400).json({ error: 'Only outstanding submitted quotes can be completed.' });
+
+  run(`
+    UPDATE quotes
+    SET status = 'completed', erp_quote_number = ?, completed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `, [erpQuoteNumber, quote.id]);
+  res.json({ id: quote.id, message: 'Quote marked as complete.' });
+});
+
+app.post('/api/quotes', requireAuth, requireRole(ROLES.ASSESSOR), upload.array('photos', 50), (req, res) => {
   const payload = JSON.parse(req.body.payload || '{}');
   const items = Array.isArray(payload.items) ? payload.items : [];
   if (!payload.appointmentId || items.length === 0) {
@@ -337,9 +441,9 @@ app.post('/api/quotes', requireAuth, requireRole('assessor'), upload.array('phot
     run('UPDATE quotes SET quote_number = ? WHERE id = ?', [quoteNumber, quoteId]);
     pricedItems.forEach((item) => createdItem.run(quoteId, item.id, item.description, item.unit, item.quantity, item.rate, item.lineTotal));
     (req.files || []).forEach((file) => createdPhoto.run(quoteId, file.originalname, file.filename, file.mimetype));
-    if (payload.appointmentId) run('UPDATE appointments SET status = ? WHERE id = ? AND assessor_id = ?', ['quoted', payload.appointmentId, req.user.id]);
+    if (payload.appointmentId) run('UPDATE appointments SET status = ? WHERE id = ? AND assessor_id = ?', ['completed', payload.appointmentId, req.user.id]);
     db.exec('COMMIT');
-    res.status(201).json({ id: quoteId, quoteNumber, message: 'Quote submitted to administrator.' });
+    res.status(201).json({ id: quoteId, quoteNumber, message: 'Quote submitted to quote administrator.' });
   } catch (error) {
     db.exec('ROLLBACK');
     (req.files || []).forEach((file) => fs.rmSync(file.path, { force: true }));
@@ -347,7 +451,7 @@ app.post('/api/quotes', requireAuth, requireRole('assessor'), upload.array('phot
   }
 });
 
-app.put('/api/quotes/:id', requireAuth, requireRole('assessor'), upload.array('photos', 50), (req, res) => {
+app.put('/api/quotes/:id', requireAuth, requireRole(ROLES.ASSESSOR), upload.array('photos', 50), (req, res) => {
   const quote = get('SELECT * FROM quotes WHERE id = ?', [req.params.id]);
   if (!quote) return res.status(404).json({ error: 'Quote not found.' });
   if (quote.assessor_id !== req.user.id) return res.status(403).json({ error: 'You can only edit your own quotes.' });
@@ -412,6 +516,16 @@ app.use((error, _req, res, next) => {
   }
   next(error);
 });
+
+
+
+
+
+
+
+
+
+
 
 
 

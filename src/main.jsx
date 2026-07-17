@@ -36,12 +36,25 @@ import mrsLogo from './assets/mrs-logo.png';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const ROLES = {
+  MANAGEMENT: 'management',
+  SCHEDULE_ADMINISTRATOR: 'schedule_administrator',
+  QUOTE_ADMINISTRATOR: 'quote_administrator',
+  ASSESSOR: 'assessor'
+};
+const ROLE_LABELS = {
+  [ROLES.MANAGEMENT]: 'Management',
+  [ROLES.SCHEDULE_ADMINISTRATOR]: 'Schedule Administrator',
+  [ROLES.QUOTE_ADMINISTRATOR]: 'Quote Administrator',
+  [ROLES.ASSESSOR]: 'Quote Assessor'
+};
 
 function App() {
   const [session, setSession] = useState(() => JSON.parse(localStorage.getItem('mrs-session') || 'null'));
   const [view, setView] = useState('calendar');
   const [quoteAppointment, setQuoteAppointment] = useState(null);
   const [quoteToEditId, setQuoteToEditId] = useState(null);
+  const [quoteToOpenId, setQuoteToOpenId] = useState(null);
 
   const api = useMemo(() => createApi(session?.token), [session?.token]);
 
@@ -57,21 +70,26 @@ function App() {
 
   if (!session) return <Login onLogin={saveSession} />;
 
-  const isAdmin = session.user.role === 'administrator';
+  const role = session.user.role;
+  const isAssessor = role === ROLES.ASSESSOR;
+  const isScheduleAdministrator = role === ROLES.SCHEDULE_ADMINISTRATOR;
+  const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
+  const isManagement = role === ROLES.MANAGEMENT;
+  const canViewQuotes = isAssessor || isQuoteAdministrator || isManagement;
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand logo-brand">
           <img className="brand-logo" src={mrsLogo} alt="Maintenance Risk Solutions" />
-          <span>{isAdmin ? 'Quote Administrator' : 'Quote Assessor'}</span>
+          <span>{ROLE_LABELS[role] || 'MRS User'}</span>
         </div>
 
         <nav>
 
           <NavButton icon={<CalendarDays />} label="Calendar" active={view === 'calendar'} onClick={() => setView('calendar')} />
-          <NavButton icon={<ClipboardList />} label={isAdmin ? 'Submitted Quotes' : 'My Quotes'} active={view === 'quotes'} onClick={() => setView('quotes')} />
-          {isAdmin && <NavButton icon={<Plus />} label="Schedule" active={view === 'schedule'} onClick={() => setView('schedule')} />}
+                    {canViewQuotes && <NavButton icon={<ClipboardList />} label={isAssessor ? 'My Quotes' : 'Outstanding Quotes'} active={view === 'quotes'} onClick={() => setView('quotes')} />}
+          {isScheduleAdministrator && <NavButton icon={<Plus />} label="Schedule" active={view === 'schedule'} onClick={() => setView('schedule')} />}
         </nav>
 
         <div className="profile">
@@ -85,10 +103,10 @@ function App() {
       </aside>
 
       <main>
-        {!isAdmin && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView('calendar'); }} />}
-        {view === 'calendar' && <CalendarView api={api} isAdmin={isAdmin} onStartQuote={(appointment) => { setQuoteAppointment(appointment); setQuoteToEditId(appointment.quote_id || null); setView('quote'); }} />}
-        {view === 'quotes' && <QuotesView api={api} isAdmin={isAdmin} />}
-        {isAdmin && view === 'schedule' && <ScheduleView api={api} onCreated={() => setView('calendar')} />}
+                {isAssessor && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView('calendar'); }} />}
+        {view === 'calendar' && <CalendarView api={api} role={role} onStartQuote={(appointment) => { setQuoteAppointment(appointment); setQuoteToEditId(appointment.quote_id || null); setView('quote'); }} onOpenQuote={(quoteId) => { setQuoteToOpenId(quoteId); setView('quotes'); }} />}
+        {view === 'quotes' && canViewQuotes && <QuotesView api={api} role={role} initialQuoteId={quoteToOpenId} onOpenedInitialQuote={() => setQuoteToOpenId(null)} />}
+        {isScheduleAdministrator && view === 'schedule' && <ScheduleView api={api} onCreated={() => setView('calendar')} />}
       </main>
     </div>
   );
@@ -130,6 +148,7 @@ function createApi(token) {
     prices: (group) => request(`/price-items${group ? `?group=${encodeURIComponent(group)}` : ''}`),
     appointments: (assessorId) => request(`/appointments${assessorId ? `?assessorId=${assessorId}` : ''}`),
     assessors: () => request('/users/assessors'),
+    quoteAdministrators: () => request('/users/quote-administrators'),
     clients: (search = '') => request(`/clients${search ? `?search=${encodeURIComponent(search)}` : ''}`),
     createAppointment: (body) => request('/appointments', { method: 'POST', body: JSON.stringify(body) }),
     quotes: (assessorId) => request(`/quotes${assessorId && assessorId !== 'all' ? `?assessorId=${assessorId}` : ''}`),
@@ -137,6 +156,7 @@ function createApi(token) {
     downloadQuotePhotos: (id, quoteNumber) => download(`/quotes/${id}/photos.zip`, `${quoteNumber || `Quote-${id}`}-photos.zip`),
     submitQuote: (form) => request('/quotes', { method: 'POST', body: form }),
     updateQuote: (id, form) => request(`/quotes/${id}`, { method: 'PUT', body: form }),
+    completeQuote: (id, erpQuoteNumber) => request(`/quotes/${id}/complete`, { method: 'PATCH', body: JSON.stringify({ erpQuoteNumber }) }),
   };
 }
 
@@ -165,9 +185,11 @@ function Login({ onLogin }) {
         <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {error && <div className="error">{error}</div>}
         <button className="primary">Sign in</button>
-        <div className="demo-logins">
-          <button type="button" onClick={() => { setEmail('assessor@mrs.local'); setPassword('assessor123'); }}>Assessor demo</button>
-          <button type="button" onClick={() => { setEmail('admin@mrs.local'); setPassword('admin123'); }}>Admin demo</button>
+                <div className="demo-logins">
+          <button type="button" onClick={() => { setEmail('assessor@mrs.local'); setPassword('assessor123'); }}>Assessor</button>
+          <button type="button" onClick={() => { setEmail('schedule@mrs.local'); setPassword('schedule123'); }}>Schedule</button>
+          <button type="button" onClick={() => { setEmail('quoteadmin@mrs.local'); setPassword('quoteadmin123'); }}>Quote Admin</button>
+          <button type="button" onClick={() => { setEmail('management@mrs.local'); setPassword('management123'); }}>Management</button>
         </div>
       </form>
     </div>
@@ -228,7 +250,7 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
     try {
       if (existingQuote) await api.updateQuote(existingQuote.id, body);
       else await api.submitQuote(body);
-      setMessage(existingQuote ? 'Quote updated.' : 'Quote submitted to the administrator.');
+      setMessage(existingQuote ? 'Quote updated.' : 'Quote submitted to the quote administrator.');
       setTimeout(onDone, 600);
     } catch (err) {
       setMessage(err.message);
@@ -295,14 +317,30 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
     </section>
   );
 }
-function CalendarView({ api, isAdmin, onStartQuote }) {
+function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
   const [assessors, setAssessors] = useState([]);
   const [assessorId, setAssessorId] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
 
-  useEffect(() => { if (isAdmin) api.assessors().then((rows) => { setAssessors(rows); setAssessorId(String(rows[0]?.id || '')); }); }, [api, isAdmin]);
-  useEffect(() => { api.appointments(assessorId).then(setAppointments); }, [api, assessorId]);
+  const isAssessor = role === ROLES.ASSESSOR;
+  const isScheduleAdministrator = role === ROLES.SCHEDULE_ADMINISTRATOR;
+  const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
+  const isManagement = role === ROLES.MANAGEMENT;
+  const canFilterAssessors = isScheduleAdministrator || isManagement;
+  const isQuoteTaskCalendar = isQuoteAdministrator || isManagement;
+
+  useEffect(() => {
+    if (!canFilterAssessors) return;
+    api.assessors().then((rows) => {
+      setAssessors(rows);
+      setAssessorId(isScheduleAdministrator ? String(rows[0]?.id || '') : '');
+    });
+  }, [api, canFilterAssessors, isScheduleAdministrator]);
+
+  useEffect(() => {
+    api.appointments(assessorId).then(setAppointments);
+  }, [api, assessorId]);
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const weekEnd = addDays(weekStart, 7);
@@ -317,11 +355,27 @@ function CalendarView({ api, isAdmin, onStartQuote }) {
       .sort((a, b) => new Date(a.appointment_start) - new Date(b.appointment_start));
   }
 
+  function handleEventClick(item) {
+    if (item.calendar_type === 'quote_task') onOpenQuote?.(item.quote_id);
+    else if (isAssessor) onStartQuote?.(item);
+  }
+
+  const subtitle = isQuoteTaskCalendar
+    ? 'Outstanding submitted quotes awaiting ERP recapture.'
+    : isScheduleAdministrator
+      ? 'Weekly appointment view by assessor.'
+      : 'Select an appointment to start the quick quote.';
+
   return (
     <section className="workspace calendar-workspace">
-      <PageTitle title="Calendar" subtitle={isAdmin ? 'Weekly appointment view by assessor.' : 'Select an appointment to start the quick quote.'} />
+      <PageTitle title="Calendar" subtitle={subtitle} />
       <div className="calendar-toolbar">
-        {isAdmin && <select className="filter-select" value={assessorId} onChange={(e) => setAssessorId(e.target.value)}>{assessors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>}
+        {canFilterAssessors && (
+          <select className="filter-select" value={assessorId} onChange={(e) => setAssessorId(e.target.value)}>
+            {isManagement && <option value="">All assessors</option>}
+            {assessors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
         <div className="week-controls">
           <button className="secondary" onClick={() => setWeekStart(addDays(weekStart, -7))}>Previous</button>
           <strong>{formatDateOnly(weekStart)} - {formatDateOnly(addDays(weekStart, 6))}</strong>
@@ -338,13 +392,15 @@ function CalendarView({ api, isAdmin, onStartQuote }) {
             </div>
             <div className="calendar-day-body">
               {appointmentsForDay(day).map((appt) => (
-                <button type="button" className="calendar-event" key={appt.id} onClick={() => !isAdmin && onStartQuote?.(appt)}>
+                <button type="button" className={appt.calendar_type === 'quote_task' ? 'calendar-event quote-task-event' : 'calendar-event'} key={`${appt.calendar_type}-${appt.id || appt.quote_id}`} onClick={() => handleEventClick(appt)}>
                   <span>{formatTime(appt.appointment_start)}</span>
-                  <strong>{appt.client_name || appt.customer_name}</strong>
+                  <strong>{appt.quote_number || appt.client_name || appt.customer_name}</strong>
+                  <small>{appt.client_name || appt.customer_name}</small>
                   <small>{appt.site_address}</small>
+                  {isManagement && appt.quote_administrator_name && <small>Quote admin: {appt.quote_administrator_name}</small>}
                 </button>
               ))}
-              {appointmentsForDay(day).length === 0 && <div className="calendar-empty">No appointments</div>}
+              {appointmentsForDay(day).length === 0 && <div className="calendar-empty">{isQuoteTaskCalendar ? 'No outstanding quotes' : 'No appointments'}</div>}
             </div>
           </div>
         ))}
@@ -509,7 +565,7 @@ function DateTimePicker({ label, value, onChange, required = false }) {
     </div>
   );
 }
-function QuotesView({ api, isAdmin }) {
+function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
   const [quotes, setQuotes] = useState([]);
   const [active, setActive] = useState(null);
   const [query, setQuery] = useState('');
@@ -518,10 +574,16 @@ function QuotesView({ api, isAdmin }) {
   const [editing, setEditing] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(null);
   const [downloadMessage, setDownloadMessage] = useState('');
+  const [erpQuoteNumber, setErpQuoteNumber] = useState('');
+
+  const isAssessor = role === ROLES.ASSESSOR;
+  const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
+  const isManagement = role === ROLES.MANAGEMENT;
+  const canReviewQuotes = isQuoteAdministrator || isManagement;
 
   useEffect(() => {
-    if (isAdmin) api.assessors().then(setAssessors);
-  }, [api, isAdmin]);
+    if (canReviewQuotes) api.assessors().then(setAssessors);
+  }, [api, canReviewQuotes]);
 
   useEffect(() => {
     api.quotes(assessorId).then((rows) => {
@@ -530,7 +592,12 @@ function QuotesView({ api, isAdmin }) {
     });
   }, [api, assessorId]);
 
-  const filtered = quotes.filter((q) => `${q.quote_number} ${q.customer_name} ${q.site_address} ${q.assessor_name}`.toLowerCase().includes(query.toLowerCase()));
+  useEffect(() => {
+    if (!initialQuoteId) return;
+    openQuote(initialQuoteId).then(() => onOpenedInitialQuote?.());
+  }, [initialQuoteId]);
+
+  const filtered = quotes.filter((q) => `${q.quote_number} ${q.customer_name} ${q.site_address} ${q.assessor_name} ${q.quote_administrator_name || ''}`.toLowerCase().includes(query.toLowerCase()));
 
   const adminRows = filtered.map((quote) => ({
     ...quote,
@@ -544,6 +611,7 @@ function QuotesView({ api, isAdmin }) {
     { field: 'customer_name', headerName: 'Client', minWidth: 220, flex: 1.3 },
     { field: 'site_address', headerName: 'Site Address', minWidth: 260, flex: 1.5 },
     { field: 'assessor_name', headerName: 'Assessor', minWidth: 170, flex: 1 },
+    ...(isManagement ? [{ field: 'quote_administrator_name', headerName: 'Quote Admin', minWidth: 180, flex: 1 }] : []),
     { field: 'submitted_label', headerName: 'Submitted', minWidth: 150, flex: 0.8 },
     { field: 'photo_count', headerName: 'Photos', minWidth: 95, flex: 0.45, type: 'number' },
     { field: 'subtotal_label', headerName: 'Reference Value', minWidth: 145, flex: 0.7 }
@@ -552,7 +620,13 @@ function QuotesView({ api, isAdmin }) {
   async function refreshQuote(id = active?.id) {
     const rows = await api.quotes(assessorId);
     setQuotes(rows);
-    if (id) setActive(await api.quote(id));
+    if (id && rows.some((quote) => quote.id === id)) {
+      const next = await api.quote(id);
+      setActive(next);
+      setErpQuoteNumber(next.erp_quote_number || '');
+    } else {
+      setActive(null);
+    }
   }
 
   async function downloadPhotos() {
@@ -565,11 +639,25 @@ function QuotesView({ api, isAdmin }) {
     }
   }
 
+  async function completeActiveQuote() {
+    if (!active) return;
+    setDownloadMessage('');
+    try {
+      await api.completeQuote(active.id, erpQuoteNumber);
+      setActive(null);
+      await refreshQuote(null);
+    } catch (err) {
+      setDownloadMessage(err.message);
+    }
+  }
+
   async function openQuote(id) {
     setEditing(false);
     setPhotoIndex(null);
     setDownloadMessage('');
-    setActive(await api.quote(id));
+    const quote = await api.quote(id);
+    setActive(quote);
+    setErpQuoteNumber(quote.erp_quote_number || '');
   }
 
   function closeQuote() {
@@ -577,13 +665,14 @@ function QuotesView({ api, isAdmin }) {
     setEditing(false);
     setPhotoIndex(null);
     setDownloadMessage('');
+    setErpQuoteNumber('');
   }
 
   function renderQuoteDetail({ fullScreen = false } = {}) {
     return (
       <div className={fullScreen ? 'panel detail-panel quote-detail-screen' : 'panel detail-panel'}>
         {!active && <div className="empty">Select a quote to view details.</div>}
-        {active && editing && !isAdmin && (
+        {active && editing && isAssessor && (
           <QuoteEditor api={api} quote={active} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await refreshQuote(active.id); }} />
         )}
         {active && !editing && (
@@ -595,18 +684,25 @@ function QuotesView({ api, isAdmin }) {
                 <p className="muted">{active.customer_name}</p>
                 <p className="muted">{active.site_address}</p>
                 <p className="muted">Assessor: {active.assessor_name}</p>
+                {active.quote_administrator_name && <p className="muted">Quote admin: {active.quote_administrator_name}</p>}
               </div>
               <div className="detail-actions">
-                {isAdmin && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
-                {!isAdmin && <button className="secondary" onClick={() => setEditing(true)}>Edit quote</button>}
+                {isQuoteAdministrator && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
+                {isAssessor && <button className="secondary" onClick={() => setEditing(true)}>Edit quote</button>}
               </div>
             </div>
             <div className="line-table">
               {active.items.map((item) => (
-                <div key={item.id}><span>{item.description}</span><span>{item.quantity} {item.unit}</span>{isAdmin && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+                <div key={item.id}><span>{item.description}</span><span>{item.quantity} {item.unit}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
               ))}
             </div>
-            {isAdmin && <h3>Reference total: R {active.subtotal.toFixed(2)}</h3>}
+            {canReviewQuotes && <h3>Reference total: R {active.subtotal.toFixed(2)}</h3>}
+            {isQuoteAdministrator && (
+              <div className="erp-complete-panel">
+                <label>ERP Quote Number<input required value={erpQuoteNumber} onChange={(e) => setErpQuoteNumber(e.target.value)} placeholder="Enter ERP quote number" /></label>
+                <button className="primary" type="button" onClick={completeActiveQuote}><Check size={18} />Mark as complete</button>
+              </div>
+            )}
             {downloadMessage && <div className="error">{downloadMessage}</div>}
             <div className="photo-grid">
               {active.photos.map((photo, index) => (
@@ -629,21 +725,24 @@ function QuotesView({ api, isAdmin }) {
     );
   }
 
-  if (isAdmin && active) {
+  if (canReviewQuotes && active) {
     return (
       <section className="workspace quote-detail-workspace">
-        <PageTitle title="Quote Detail" subtitle="Review the full assessor quote packet before redoing it in ERP." />
+        <PageTitle title="Quote Detail" subtitle="Review the assessor quote packet before recapturing it in ERP." />
         {renderQuoteDetail({ fullScreen: true })}
       </section>
     );
   }
 
+  const title = isAssessor ? 'My Quotes' : isManagement ? 'Outstanding Quote Work' : 'My Outstanding Quotes';
+  const subtitle = isAssessor ? 'Track and edit submitted quotes until the quote administrator completes them.' : 'Open a submitted quote to review the full packet.';
+
   return (
     <section className="workspace">
-      <PageTitle title={isAdmin ? 'Submitted Quotes' : 'My Quotes'} subtitle={isAdmin ? 'Open a submitted quote to review the full packet.' : 'Track and edit all quotes you have submitted.'} />
+      <PageTitle title={title} subtitle={subtitle} />
 
       <div className="quote-tools">
-        {isAdmin && (
+        {canReviewQuotes && (
           <select className="filter-select" value={assessorId} onChange={(e) => setAssessorId(e.target.value)}>
             <option value="all">All assessors</option>
             {assessors.map((assessor) => <option key={assessor.id} value={assessor.id}>{assessor.name}</option>)}
@@ -652,7 +751,7 @@ function QuotesView({ api, isAdmin }) {
         <div className="searchbar"><Search size={18} /><input placeholder="Search quotes" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
       </div>
 
-      {isAdmin ? (
+      {canReviewQuotes ? (
         <div className="panel admin-quotes-table">
           <DataGrid
             rows={adminRows}
@@ -940,6 +1039,17 @@ function stripTime(value) {
 }
 
 createRoot(document.getElementById('root')).render(<App />);
+
+
+
+
+
+
+
+
+
+
+
 
 
 

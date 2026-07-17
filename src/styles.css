@@ -929,3 +929,30 @@ textarea { min-height: 92px; resize: vertical; }
 }
 
 
+
+.quote-task-event {
+  border-left-color: #a7d43b;
+  background: #f5fbea;
+}
+
+.erp-complete-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  margin: 14px 0;
+  border: 1px solid #d7e5dd;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+
+.erp-complete-panel label {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .erp-complete-panel {
+    grid-template-columns: 1fr;
+  }
+}
