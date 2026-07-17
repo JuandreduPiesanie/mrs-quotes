@@ -14,6 +14,7 @@ db.exec('PRAGMA foreign_keys = ON;');
 db.exec('PRAGMA journal_mode = WAL;');
 
 export const ROLES = {
+  ADMIN: 'admin',
   MANAGEMENT: 'management',
   SCHEDULE_ADMINISTRATOR: 'schedule_administrator',
   QUOTE_ADMINISTRATOR: 'quote_administrator',
@@ -27,7 +28,7 @@ export function initDb() {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('management', 'schedule_administrator', 'quote_administrator', 'assessor')),
+      role TEXT NOT NULL CHECK (role IN ('admin', 'management', 'schedule_administrator', 'quote_administrator', 'assessor')),
       quote_administrator_id INTEGER REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -108,6 +109,7 @@ export function initDb() {
   ensureColumn('quotes', 'quote_number', 'TEXT');
   ensureColumn('quotes', 'erp_quote_number', 'TEXT');
   ensureColumn('quotes', 'completed_at', 'TEXT');
+  repairLegacyUserForeignKeys();
   backfillQuoteNumbers();
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_quote_number ON quotes(quote_number) WHERE quote_number IS NOT NULL;');
 
@@ -118,30 +120,107 @@ export function initDb() {
 
 function migrateUsersRoleSchema() {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
-  if (!table?.sql || table.sql.includes('quote_administrator')) return;
+  if (!table?.sql || (table.sql.includes('quote_administrator') && table.sql.includes("'admin'"))) return;
+  const hasQuoteAdministratorId = db.prepare('PRAGMA table_info(users)').all()
+    .some((column) => column.name === 'quote_administrator_id');
+
+  // Keep dependent foreign keys pointing at users during the table rebuild.
+  db.exec('PRAGMA foreign_keys = OFF;');
+  db.exec('PRAGMA legacy_alter_table = ON;');
+  try {
+    db.exec(`
+      BEGIN;
+      ALTER TABLE users RENAME TO users_old;
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('admin', 'management', 'schedule_administrator', 'quote_administrator', 'assessor')),
+        quote_administrator_id INTEGER REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO users (id, name, email, password_hash, role, quote_administrator_id, created_at)
+      SELECT id, name, email, password_hash,
+        CASE WHEN role = 'administrator' THEN 'admin' ELSE role END,
+        ${hasQuoteAdministratorId ? 'quote_administrator_id' : 'NULL'},
+        created_at
+      FROM users_old;
+      DROP TABLE users_old;
+      COMMIT;
+    `);
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK;');
+    throw error;
+  } finally {
+    db.exec('PRAGMA legacy_alter_table = OFF;');
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
+}
+
+function repairLegacyUserForeignKeys() {
+  const referencesUsersOld = (table) =>
+    db.prepare(`PRAGMA foreign_key_list(${table})`).all()
+      .some((foreignKey) => foreignKey.table === 'users_old');
+  const repairAppointments = referencesUsersOld('appointments');
+  const repairQuotes = referencesUsersOld('quotes');
+  if (!repairAppointments && !repairQuotes) return;
 
   db.exec('PRAGMA foreign_keys = OFF;');
-  db.exec('ALTER TABLE users RENAME TO users_old;');
-  db.exec(`
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('management', 'schedule_administrator', 'quote_administrator', 'assessor')),
-      quote_administrator_id INTEGER REFERENCES users(id),
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  db.exec(`
-    INSERT INTO users (id, name, email, password_hash, role, created_at)
-    SELECT id, name, email, password_hash,
-      CASE WHEN role = 'administrator' THEN 'quote_administrator' ELSE role END,
-      created_at
-    FROM users_old;
-  `);
-  db.exec('DROP TABLE users_old;');
-  db.exec('PRAGMA foreign_keys = ON;');
+  try {
+    db.exec(`
+      BEGIN;
+      ${repairAppointments ? `
+        CREATE TABLE appointments_repaired (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          assessor_id INTEGER NOT NULL REFERENCES users(id),
+          customer_name TEXT NOT NULL,
+          site_address TEXT NOT NULL,
+          request_details TEXT NOT NULL,
+          appointment_start TEXT NOT NULL,
+          appointment_end TEXT,
+          status TEXT NOT NULL DEFAULT 'scheduled',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          client_id INTEGER REFERENCES clients(id)
+        );
+        INSERT INTO appointments_repaired
+          (id, assessor_id, customer_name, site_address, request_details, appointment_start, appointment_end, status, created_at, client_id)
+        SELECT id, assessor_id, customer_name, site_address, request_details, appointment_start, appointment_end, status, created_at, client_id
+        FROM appointments;
+        DROP TABLE appointments;
+        ALTER TABLE appointments_repaired RENAME TO appointments;
+      ` : ''}
+      ${repairQuotes ? `
+        CREATE TABLE quotes_repaired (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          assessor_id INTEGER NOT NULL REFERENCES users(id),
+          appointment_id INTEGER REFERENCES appointments(id),
+          quote_number TEXT,
+          customer_name TEXT NOT NULL,
+          site_address TEXT NOT NULL,
+          request_details TEXT,
+          status TEXT NOT NULL DEFAULT 'submitted',
+          subtotal REAL NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          client_id INTEGER REFERENCES clients(id),
+          erp_quote_number TEXT,
+          completed_at TEXT
+        );
+        INSERT INTO quotes_repaired
+          (id, assessor_id, appointment_id, quote_number, customer_name, site_address, request_details, status, subtotal, created_at, client_id, erp_quote_number, completed_at)
+        SELECT id, assessor_id, appointment_id, quote_number, customer_name, site_address, request_details, status, subtotal, created_at, client_id, erp_quote_number, completed_at
+        FROM quotes;
+        DROP TABLE quotes;
+        ALTER TABLE quotes_repaired RENAME TO quotes;
+      ` : ''}
+      COMMIT;
+    `);
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK;');
+    throw error;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
 }
 
 function seedUsers() {
@@ -152,11 +231,18 @@ function seedUsers() {
   insert.run('Quote Assessor', 'assessor@mrs.local', bcrypt.hashSync('assessor123', 10), ROLES.ASSESSOR);
 
   const legacyAdmin = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@mrs.local');
-  if (legacyAdmin) db.prepare('UPDATE users SET role = ? WHERE id = ?').run(ROLES.QUOTE_ADMINISTRATOR, legacyAdmin.id);
+  if (legacyAdmin) db.prepare('UPDATE users SET role = ? WHERE id = ?').run(ROLES.ADMIN, legacyAdmin.id);
 
   const quoteAdmin = db.prepare('SELECT id FROM users WHERE role = ? ORDER BY id LIMIT 1').get(ROLES.QUOTE_ADMINISTRATOR);
   if (quoteAdmin) {
-    db.prepare('UPDATE users SET quote_administrator_id = ? WHERE role = ? AND quote_administrator_id IS NULL').run(quoteAdmin.id, ROLES.ASSESSOR);
+    db.prepare(`
+      UPDATE users
+      SET quote_administrator_id = ?
+      WHERE role = ? AND (
+        quote_administrator_id IS NULL
+        OR quote_administrator_id NOT IN (SELECT id FROM users WHERE role = ?)
+      )
+    `).run(quoteAdmin.id, ROLES.ASSESSOR, ROLES.QUOTE_ADMINISTRATOR);
   }
 }
 
@@ -210,4 +296,3 @@ export function get(sql, params = []) {
 export function run(sql, params = []) {
   return db.prepare(sql).run(...params);
 }
-

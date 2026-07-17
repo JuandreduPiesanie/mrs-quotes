@@ -97,6 +97,28 @@ textarea { min-height: 92px; resize: vertical; }
 .success, .error { border-radius: 7px; padding: 10px 12px; font-weight: 700; }
 .success { color: #176b62; background: #e9f5f2; }
 .error { color: #8a321e; background: #ffe9e2; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.assignment-panel { padding: 0; overflow: hidden; }
+.assignment-header,
+.assignment-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .8fr); gap: 20px; align-items: center; padding: 15px 18px; }
+.assignment-header { color: #617079; background: #f6f8f7; border-bottom: 1px solid #dce5e2; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.assignment-row + .assignment-row { border-top: 1px solid #edf1ef; }
+.assignment-row strong,
+.assignment-row small { display: block; }
+.assignment-row small { margin-top: 4px; color: #617079; }
+.assignment-row label { min-width: 0; }
+.assignment-note { color: #617079; font-size: 13px; line-height: 1.5; }
+.user-management-workspace { max-width: 1180px; }
+.user-management-grid { display: grid; grid-template-columns: minmax(320px, .75fr) minmax(0, 1.25fr); gap: 18px; align-items: start; }
+.user-management-grid h2 { margin: 0 0 4px; font-size: 20px; }
+.user-list-panel { display: grid; gap: 14px; }
+.user-list { display: grid; }
+.user-list-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 13px 0; border-top: 1px solid #edf1ef; }
+.user-list-row strong,
+.user-list-row small { display: block; }
+.user-list-row small { margin-top: 4px; color: #617079; }
+.role-badge { flex: 0 0 auto; border-radius: 999px; padding: 6px 10px; background: var(--mrs-lime-soft); color: #506f11; font-size: 12px; font-weight: 800; }
 
 @media (max-width: 980px) {
   .app-shell { grid-template-columns: 1fr; }
@@ -104,6 +126,7 @@ textarea { min-height: 92px; resize: vertical; }
   nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profile { margin-top: 0; }
   .quote-layout, .quote-browser { grid-template-columns: 1fr; }
+  .user-management-grid { grid-template-columns: 1fr; }
   .quote-summary { position: static; }
 }
 
@@ -113,6 +136,8 @@ textarea { min-height: 92px; resize: vertical; }
   .page-title h1 { font-size: 25px; }
   .line-table div { grid-template-columns: 1fr; }
   .selected-line { grid-template-columns: 1fr; }
+  .assignment-header { display: none; }
+  .assignment-row { grid-template-columns: 1fr; gap: 10px; }
 }
 
 .quote-tools {

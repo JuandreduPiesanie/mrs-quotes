@@ -37,12 +37,14 @@ import './styles.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 const ROLES = {
+  ADMIN: 'admin',
   MANAGEMENT: 'management',
   SCHEDULE_ADMINISTRATOR: 'schedule_administrator',
   QUOTE_ADMINISTRATOR: 'quote_administrator',
   ASSESSOR: 'assessor'
 };
 const ROLE_LABELS = {
+  [ROLES.ADMIN]: 'Admin',
   [ROLES.MANAGEMENT]: 'Management',
   [ROLES.SCHEDULE_ADMINISTRATOR]: 'Schedule Administrator',
   [ROLES.QUOTE_ADMINISTRATOR]: 'Quote Administrator',
@@ -71,11 +73,12 @@ function App() {
   if (!session) return <Login onLogin={saveSession} />;
 
   const role = session.user.role;
+  const isAdmin = role === ROLES.ADMIN;
   const isAssessor = role === ROLES.ASSESSOR;
   const isScheduleAdministrator = role === ROLES.SCHEDULE_ADMINISTRATOR;
   const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
   const isManagement = role === ROLES.MANAGEMENT;
-  const canViewQuotes = isAssessor || isQuoteAdministrator || isManagement;
+  const canViewQuotes = isAdmin || isAssessor || isQuoteAdministrator || isManagement;
 
   return (
     <div className="app-shell">
@@ -88,8 +91,10 @@ function App() {
         <nav>
 
           <NavButton icon={<CalendarDays />} label="Calendar" active={view === 'calendar'} onClick={() => setView('calendar')} />
-                    {canViewQuotes && <NavButton icon={<ClipboardList />} label={isAssessor ? 'My Quotes' : 'Outstanding Quotes'} active={view === 'quotes'} onClick={() => setView('quotes')} />}
-          {isScheduleAdministrator && <NavButton icon={<Plus />} label="Schedule" active={view === 'schedule'} onClick={() => setView('schedule')} />}
+          {canViewQuotes && <NavButton icon={<ClipboardList />} label={isAssessor ? 'My Quotes' : 'Outstanding Quotes'} active={view === 'quotes'} onClick={() => setView('quotes')} />}
+          {(isAdmin || isScheduleAdministrator) && <NavButton icon={<Plus />} label="Schedule" active={view === 'schedule'} onClick={() => setView('schedule')} />}
+          {(isAdmin || isManagement) && <NavButton icon={<UserRound />} label="Assignments" active={view === 'assignments'} onClick={() => setView('assignments')} />}
+          {isAdmin && <NavButton icon={<Plus />} label="Users" active={view === 'users'} onClick={() => setView('users')} />}
         </nav>
 
         <div className="profile">
@@ -103,10 +108,12 @@ function App() {
       </aside>
 
       <main>
-                {isAssessor && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView('calendar'); }} />}
+        {isAssessor && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView('calendar'); }} />}
         {view === 'calendar' && <CalendarView api={api} role={role} onStartQuote={(appointment) => { setQuoteAppointment(appointment); setQuoteToEditId(appointment.quote_id || null); setView('quote'); }} onOpenQuote={(quoteId) => { setQuoteToOpenId(quoteId); setView('quotes'); }} />}
         {view === 'quotes' && canViewQuotes && <QuotesView api={api} role={role} initialQuoteId={quoteToOpenId} onOpenedInitialQuote={() => setQuoteToOpenId(null)} />}
-        {isScheduleAdministrator && view === 'schedule' && <ScheduleView api={api} onCreated={() => setView('calendar')} />}
+        {(isAdmin || isScheduleAdministrator) && view === 'schedule' && <ScheduleView api={api} onCreated={() => setView('calendar')} />}
+        {(isAdmin || isManagement) && view === 'assignments' && <AssignmentsView api={api} />}
+        {isAdmin && view === 'users' && <UsersView api={api} />}
       </main>
     </div>
   );
@@ -149,6 +156,12 @@ function createApi(token) {
     appointments: (assessorId) => request(`/appointments${assessorId ? `?assessorId=${assessorId}` : ''}`),
     assessors: () => request('/users/assessors'),
     quoteAdministrators: () => request('/users/quote-administrators'),
+    users: () => request('/users'),
+    createUser: (body) => request('/users', { method: 'POST', body: JSON.stringify(body) }),
+    assignQuoteAdministrator: (assessorId, quoteAdministratorId) => request(`/users/assessors/${assessorId}/quote-administrator`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quoteAdministratorId })
+    }),
     clients: (search = '') => request(`/clients${search ? `?search=${encodeURIComponent(search)}` : ''}`),
     createAppointment: (body) => request('/appointments', { method: 'POST', body: JSON.stringify(body) }),
     quotes: (assessorId) => request(`/quotes${assessorId && assessorId !== 'all' ? `?assessorId=${assessorId}` : ''}`),
@@ -326,7 +339,7 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
   const isAssessor = role === ROLES.ASSESSOR;
   const isScheduleAdministrator = role === ROLES.SCHEDULE_ADMINISTRATOR;
   const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
-  const isManagement = role === ROLES.MANAGEMENT;
+  const isManagement = role === ROLES.MANAGEMENT || role === ROLES.ADMIN;
   const canFilterAssessors = isScheduleAdministrator || isManagement;
   const isQuoteTaskCalendar = isQuoteAdministrator || isManagement;
 
@@ -477,6 +490,141 @@ function ScheduleView({ api, onCreated }) {
   );
 }
 
+function AssignmentsView({ api }) {
+  const [assessors, setAssessors] = useState([]);
+  const [quoteAdministrators, setQuoteAdministrators] = useState([]);
+  const [savingId, setSavingId] = useState(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    Promise.all([api.assessors(), api.quoteAdministrators()])
+      .then(([assessorRows, administratorRows]) => {
+        setAssessors(assessorRows);
+        setQuoteAdministrators(administratorRows);
+      })
+      .catch((err) => setError(err.message));
+  }, [api]);
+
+  async function assign(assessor, value) {
+    const quoteAdministratorId = value ? Number(value) : null;
+    setSavingId(assessor.id);
+    setMessage('');
+    setError('');
+    try {
+      const updated = await api.assignQuoteAdministrator(assessor.id, quoteAdministratorId);
+      setAssessors((rows) => rows.map((row) => row.id === updated.id ? updated : row));
+      setMessage(`${updated.name} is now assigned to ${updated.quote_administrator_name || 'no Quote Administrator'}.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <section className="workspace narrow">
+      <PageTitle title="Assessor Assignments" subtitle="Route each Quote Assessor's submitted work to a Quote Administrator." />
+      <div className="panel assignment-panel">
+        <div className="assignment-header">
+          <span>Quote Assessor</span>
+          <span>Quote Administrator</span>
+        </div>
+        {assessors.map((assessor) => (
+          <div className="assignment-row" key={assessor.id}>
+            <div>
+              <strong>{assessor.name}</strong>
+              <small>{assessor.email}</small>
+            </div>
+            <label>
+              <span className="sr-only">Quote Administrator for {assessor.name}</span>
+              <select
+                value={assessor.quote_administrator_id || ''}
+                disabled={savingId === assessor.id}
+                onChange={(event) => assign(assessor, event.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {quoteAdministrators.map((administrator) => (
+                  <option key={administrator.id} value={administrator.id}>{administrator.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ))}
+        {assessors.length === 0 && !error && <div className="empty">No Quote Assessors are available.</div>}
+      </div>
+      <p className="assignment-note">Changing an assignment moves that assessor's outstanding submitted quotes and calendar work to the selected Quote Administrator.</p>
+      {message && <div className="success">{message}</div>}
+      {error && <div className="error">{error}</div>}
+    </section>
+  );
+}
+
+function UsersView({ api }) {
+  const emptyForm = { name: '', email: '', password: '', role: ROLES.ASSESSOR };
+  const [users, setUsers] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.users().then(setUsers).catch((err) => setError(err.message));
+  }, [api]);
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const created = await api.createUser(form);
+      setUsers((rows) => [...rows, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm(emptyForm);
+      setMessage(`${created.name} was registered as ${ROLE_LABELS[created.role]}.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="workspace user-management-workspace">
+      <PageTitle title="User Management" subtitle="Register users and control the role assigned to each account." />
+      <div className="user-management-grid">
+        <form className="panel stack" onSubmit={submit}>
+          <h2>Register user</h2>
+          <label>Full name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+          <label>Email address<input required type="email" autoComplete="off" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+          <label>Temporary password<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
+          <label>Role
+            <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+              {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <button className="primary" disabled={saving}><Plus size={18} />{saving ? 'Registering...' : 'Register user'}</button>
+          {message && <div className="success">{message}</div>}
+          {error && <div className="error">{error}</div>}
+        </form>
+
+        <div className="panel user-list-panel">
+          <h2>Registered users</h2>
+          <div className="user-list">
+            {users.map((user) => (
+              <div className="user-list-row" key={user.id}>
+                <div><strong>{user.name}</strong><small>{user.email}</small></div>
+                <span className="role-badge">{ROLE_LABELS[user.role] || user.role}</span>
+              </div>
+            ))}
+            {users.length === 0 && <div className="empty">No users are registered.</div>}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DateTimePicker({ label, value, onChange, required = false }) {
   const initial = parseDateTimeValue(value);
   const pickerRef = useRef(null);
@@ -576,9 +724,11 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
   const [downloadMessage, setDownloadMessage] = useState('');
   const [erpQuoteNumber, setErpQuoteNumber] = useState('');
 
+  const isAdmin = role === ROLES.ADMIN;
   const isAssessor = role === ROLES.ASSESSOR;
-  const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
-  const isManagement = role === ROLES.MANAGEMENT;
+  const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR || isAdmin;
+  const isManagement = role === ROLES.MANAGEMENT || isAdmin;
+  const canEditQuote = isAssessor || isAdmin;
   const canReviewQuotes = isQuoteAdministrator || isManagement;
 
   useEffect(() => {
@@ -672,7 +822,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     return (
       <div className={fullScreen ? 'panel detail-panel quote-detail-screen' : 'panel detail-panel'}>
         {!active && <div className="empty">Select a quote to view details.</div>}
-        {active && editing && isAssessor && (
+        {active && editing && canEditQuote && (
           <QuoteEditor api={api} quote={active} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await refreshQuote(active.id); }} />
         )}
         {active && !editing && (
@@ -688,7 +838,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
               </div>
               <div className="detail-actions">
                 {isQuoteAdministrator && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
-                {isAssessor && <button className="secondary" onClick={() => setEditing(true)}>Edit quote</button>}
+                {canEditQuote && <button className="secondary" onClick={() => setEditing(true)}>Edit quote</button>}
               </div>
             </div>
             <div className="line-table">

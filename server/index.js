@@ -141,7 +141,7 @@ function createZip(files) {
   return Buffer.concat([...chunks, centralBuffer, end]);
 }
 function canAccessQuote(user, quote) {
-  if (user.role === ROLES.MANAGEMENT) return true;
+  if (user.role === ROLES.ADMIN || user.role === ROLES.MANAGEMENT) return true;
   if (user.role === ROLES.ASSESSOR) return quote.assessor_id === user.id;
   if (user.role === ROLES.QUOTE_ADMINISTRATOR) return quote.quote_administrator_id === user.id;
   return false;
@@ -160,6 +160,51 @@ app.post('/api/auth/login', (req, res) => {
 
 app.get('/api/me', requireAuth, (req, res) => res.json({ user: req.user }));
 
+app.get('/api/users', requireAuth, requireRole(ROLES.ADMIN), (_req, res) => {
+  res.json(all(`
+    SELECT id, name, email, role, created_at
+    FROM users
+    ORDER BY name
+  `));
+});
+
+app.post('/api/users', requireAuth, requireRole(ROLES.ADMIN), (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  const role = String(req.body?.role || '');
+  const allowedRoles = Object.values(ROLES);
+
+  if (!name || !email || !password || !role) {
+    return res.status(400).json({ error: 'Name, email, password, and role are required.' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Enter a valid email address.' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'Select a valid user role.' });
+  }
+
+  try {
+    const result = run(
+      'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
+      [name, email, bcrypt.hashSync(password, 10), role]
+    );
+    res.status(201).json(get(
+      'SELECT id, name, email, role, created_at FROM users WHERE id = ?',
+      [result.lastInsertRowid]
+    ));
+  } catch (error) {
+    if (String(error.message).includes('UNIQUE constraint failed: users.email')) {
+      return res.status(409).json({ error: 'A user with this email address already exists.' });
+    }
+    throw error;
+  }
+});
+
 app.get('/api/users/assessors', requireAuth, requireRole(ROLES.SCHEDULE_ADMINISTRATOR, ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT), (req, res) => {
   const params = [ROLES.ASSESSOR];
   const assignedFilter = req.user.role === ROLES.QUOTE_ADMINISTRATOR ? 'AND u.quote_administrator_id = ?' : '';
@@ -177,6 +222,34 @@ app.get('/api/users/assessors', requireAuth, requireRole(ROLES.SCHEDULE_ADMINIST
 app.get('/api/users/quote-administrators', requireAuth, requireRole(ROLES.SCHEDULE_ADMINISTRATOR, ROLES.MANAGEMENT), (_req, res) => {
   res.json(all('SELECT id, name, email FROM users WHERE role = ? ORDER BY name', [ROLES.QUOTE_ADMINISTRATOR]));
 });
+
+app.patch('/api/users/assessors/:id/quote-administrator', requireAuth, requireRole(ROLES.MANAGEMENT), (req, res) => {
+  const assessorId = Number(req.params.id);
+  const requestedQuoteAdministratorId = req.body?.quoteAdministratorId;
+  const quoteAdministratorId = requestedQuoteAdministratorId === null || requestedQuoteAdministratorId === ''
+    ? null
+    : Number(requestedQuoteAdministratorId);
+  const assessor = Number.isInteger(assessorId)
+    ? get('SELECT id FROM users WHERE id = ? AND role = ?', [assessorId, ROLES.ASSESSOR])
+    : null;
+  if (!assessor) return res.status(404).json({ error: 'Quote assessor not found.' });
+
+  if (quoteAdministratorId !== null) {
+    const quoteAdministrator = Number.isInteger(quoteAdministratorId)
+      ? get('SELECT id FROM users WHERE id = ? AND role = ?', [quoteAdministratorId, ROLES.QUOTE_ADMINISTRATOR])
+      : null;
+    if (!quoteAdministrator) return res.status(400).json({ error: 'Quote Administrator not found.' });
+  }
+
+  run('UPDATE users SET quote_administrator_id = ? WHERE id = ?', [quoteAdministratorId, assessorId]);
+  res.json(get(`
+    SELECT u.id, u.name, u.email, u.quote_administrator_id, qa.name AS quote_administrator_name
+    FROM users u
+    LEFT JOIN users qa ON qa.id = u.quote_administrator_id
+    WHERE u.id = ?
+  `, [assessorId]));
+});
+
 app.get('/api/clients', requireAuth, requireRole(ROLES.SCHEDULE_ADMINISTRATOR, ROLES.MANAGEMENT), (req, res) => {
   const search = String(req.query.search || '').trim();
   const params = search ? [`%${search}%`] : [];
@@ -189,7 +262,7 @@ app.get('/api/price-items', requireAuth, (req, res) => {
   const params = group ? [group] : [];
   const where = group ? 'WHERE active = 1 AND quote_group = ?' : 'WHERE active = 1';
   const items = all(`
-    SELECT id, section, category, quote_group, item_code, description, unit, ${[ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT].includes(req.user.role) ? 'rate' : 'NULL AS rate'}
+    SELECT id, section, category, quote_group, item_code, description, unit, ${[ROLES.ADMIN, ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT].includes(req.user.role) ? 'rate' : 'NULL AS rate'}
     FROM price_items
     ${where}
     ORDER BY category, description
@@ -208,7 +281,7 @@ app.get('/api/price-sections', requireAuth, (_req, res) => {
 });
 
 app.get('/api/appointments', requireAuth, (req, res) => {
-  if (req.user.role === ROLES.QUOTE_ADMINISTRATOR || req.user.role === ROLES.MANAGEMENT) {
+  if ([ROLES.ADMIN, ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT].includes(req.user.role)) {
     const params = [];
     const quoteAdminFilter = req.user.role === ROLES.QUOTE_ADMINISTRATOR
       ? 'AND assessor.quote_administrator_id = ?'
@@ -297,11 +370,11 @@ app.get('/api/quotes', requireAuth, (req, res) => {
     filters.push('assessor.quote_administrator_id = ?');
     params.push(req.user.id);
     filters.push("q.status = 'submitted'");
-  } else if (req.user.role === ROLES.MANAGEMENT) {
+  } else if (req.user.role === ROLES.MANAGEMENT || req.user.role === ROLES.ADMIN) {
     filters.push("q.status = 'submitted'");
   }
 
-  if ([ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT].includes(req.user.role) && requestedAssessorId) {
+  if ([ROLES.ADMIN, ROLES.QUOTE_ADMINISTRATOR, ROLES.MANAGEMENT].includes(req.user.role) && requestedAssessorId) {
     filters.push('q.assessor_id = ?');
     params.push(requestedAssessorId);
   }
@@ -454,7 +527,9 @@ app.post('/api/quotes', requireAuth, requireRole(ROLES.ASSESSOR), upload.array('
 app.put('/api/quotes/:id', requireAuth, requireRole(ROLES.ASSESSOR), upload.array('photos', 50), (req, res) => {
   const quote = get('SELECT * FROM quotes WHERE id = ?', [req.params.id]);
   if (!quote) return res.status(404).json({ error: 'Quote not found.' });
-  if (quote.assessor_id !== req.user.id) return res.status(403).json({ error: 'You can only edit your own quotes.' });
+  if (req.user.role !== ROLES.ADMIN && quote.assessor_id !== req.user.id) {
+    return res.status(403).json({ error: 'You can only edit your own quotes.' });
+  }
 
   const payload = JSON.parse(req.body.payload || '{}');
   const items = Array.isArray(payload.items) ? payload.items : [];

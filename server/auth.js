@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { get } from './db.js';
+import { get, ROLES } from './db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-before-production';
 
@@ -25,7 +25,9 @@ export function requireAuth(req, res, next) {
 
 export function requireRole(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) return res.status(403).json({ error: 'You do not have access to this area.' });
+    if (req.user.role !== ROLES.ADMIN && !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'You do not have access to this area.' });
+    }
     next();
   };
 }
