@@ -1,109 +1,51 @@
-# Hostinger Deployment
+# MRS Quotes deployment
 
-This repo deploys as a Vite/React web container, a Node API container, and a private SQL Server container behind Traefik on a Hostinger Docker VPS.
+## Docker deployment
 
-## DNS
+Copy .env.example to .env and replace the SQL password and JWT signing key. The JWT key must be a long random secret and must not be committed.
 
-Create `A` records for the app and API hosts and point both to the VPS public IP.
+    Copy-Item .env.example .env
+    docker compose config
+    docker compose up -d --build
 
-```text
-invoice      A  <vps-public-ip>
-api.invoice  A  <vps-public-ip>
-```
+The stack contains:
 
-If your DNS editor asks for full names, use your real domains, for example:
+- mrs-quotes-web: Nginx serving the React PWA and proxying API and upload traffic.
+- mrs-quotes-api: .NET 10 Minimal API; applies EF migrations on startup.
+- mrs-quotes-db: SQL Server 2022 with persistent database storage.
 
-```text
-invoice.example.co.za
-api.invoice.example.co.za
-```
+Persistent volumes:
 
-## GitHub Actions Variables
+- mrs-quotes-sql-data stores SQL Server data.
+- mrs-quotes-uploads stores quote photos.
 
-Create these under `Settings > Secrets and variables > Actions > Variables`:
+The API retries database migrations for about one minute while SQL Server starts. Check startup with:
 
-```text
-HOSTINGER_VM_ID
-APP_HOST
-API_HOST
-VITE_API_BASE_URL
-VITE_GEOAPIFY_API_KEY
-MSSQL_DATABASE
-MSSQL_PID
-CORS_ORIGIN
-```
+    docker compose logs -f api
 
-Example values:
+## HTTPS
 
-```text
-HOSTINGER_VM_ID=1745253
-APP_HOST=invoice.example.co.za
-API_HOST=api.invoice.example.co.za
-VITE_API_BASE_URL=https://api.invoice.example.co.za
-VITE_GEOAPIFY_API_KEY=your_geoapify_api_key
-MSSQL_DATABASE=HaInvoiceGen
-MSSQL_PID=Express
-CORS_ORIGIN=https://invoice.example.co.za
-```
+PWA installation and service workers require HTTPS outside localhost. Put the web container behind a TLS reverse proxy such as Traefik, Caddy, or Nginx and set APP_ORIGIN to the public HTTPS frontend origin. The browser normally needs only the web origin because Nginx proxies the API.
 
-## GitHub Actions Secrets
+Back up both Docker volumes. Database backups do not include uploaded photos.
 
-Create these under `Settings > Secrets and variables > Actions > Secrets`:
+## Install on a tablet
 
-```text
-HOSTINGER_API_KEY
-MSSQL_SA_PASSWORD
-```
+After deploying over HTTPS:
 
-Use a long, strong SQL Server `sa` password. SQL Server rejects weak passwords.
+- Android with Chrome: open the site, choose Install app or Add to Home screen.
+- iPad with Safari: open the site, tap Share, then Add to Home Screen.
 
-## GHCR Access
+The installed app opens in standalone mode. Its shell can load after a prior visit without a connection, but login, calendars, submissions, and quote data still require access to the API.
 
-The workflow builds and pushes these images to GitHub Container Registry:
+## First login
 
-```text
-ghcr.io/<github-owner>/ha-invoice-gen-web:<commit-sha>
-ghcr.io/<github-owner>/ha-invoice-gen-api:<commit-sha>
-```
+On a new database, open the login page and choose the first-time setup option. Create the initial Admin account, then register other users and assign assessors to Quote Administrators from the Admin or Management screens.
 
-Hostinger must be able to pull both GHCR images. Make the packages public, or add GHCR credentials in Hostinger Docker Manager:
+## Validation before deployment
 
-```text
-Registry: ghcr.io
-Username: <github-username>
-Password/token: <github-personal-access-token-with-read:packages>
-```
+    dotnet build backend\MrsQuotes.slnx
+    npm run build --prefix frontend
+    docker compose --env-file .env.example config --quiet
 
-## Data Persistence
-
-Quotes and invoices are stored in SQL Server through the API. SQL Server data lives in the Docker volume named:
-
-```text
-ha-invoice-gen-sql-data
-```
-
-Redeploying the app updates containers without deleting that volume. Do not remove the volume unless you intentionally want to delete all saved records.
-
-The browser still keeps a local cache. On first connection to the API, existing browser records are imported into SQL automatically.
-
-## Local Validation
-
-Validate the compose file before deploying:
-
-```bash
-docker compose --env-file .env.example config --quiet
-```
-
-Build the frontend:
-
-```bash
-npm run build
-```
-
-Install and smoke-check the API dependencies:
-
-```bash
-cd backend
-npm install
-npm start
-```
+Integration tests are present in backend\MrsQuotes.IntegrationTests. Their JWT test-host fixture is currently deferred and should be repaired before relying on automated deployment gates.

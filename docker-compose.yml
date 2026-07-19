@@ -1,0 +1,49 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mrs-quotes-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "${MSSQL_PID:-Express}"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+    volumes:
+      - mrs-quotes-sql-data:/var/opt/mssql
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mrs-quotes-api
+    depends_on:
+      - db
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Database: "Server=db,1433;Database=${MSSQL_DATABASE:-MrsQuotes};User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      Authentication__JwtSigningKey: "${JWT_SIGNING_KEY}"
+      Authentication__Issuer: "${JWT_ISSUER:-mrs-quotes-api}"
+      Authentication__Audience: "${JWT_AUDIENCE:-mrs-quotes-web}"
+      Cors__AllowedOrigins__0: "${APP_ORIGIN:-http://localhost:8080}"
+      Storage__UploadsPath: /app/uploads
+    volumes:
+      - mrs-quotes-uploads:/app/uploads
+    ports:
+      - "${API_PORT:-4000}:8080"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    container_name: mrs-quotes-web
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  mrs-quotes-sql-data:
+  mrs-quotes-uploads:

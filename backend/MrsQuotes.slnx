@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="MrsQuotes.Api/MrsQuotes.Api.csproj" />
+  <Project Path="MrsQuotes.Client/MrsQuotes.Client.csproj" />
+  <Project Path="MrsQuotes.IntegrationTests/MrsQuotes.IntegrationTests.csproj" />
+  <Project Path="MrsQuotes.Models/MrsQuotes.Models.csproj" />
+</Solution>
