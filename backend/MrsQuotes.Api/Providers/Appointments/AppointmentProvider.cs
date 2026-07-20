@@ -114,4 +114,77 @@ public sealed class AppointmentProvider(MrsQuotesDbContext context) : IAppointme
             CalendarType = "appointment"
         };
     }
+
+    public async Task<AppointmentDto?> UpdateAsync(int appointmentId, CreateAppointmentRequest request)
+    {
+        var appointment = await context.Appointments
+            .Include(x => x.Quote)
+            .FirstOrDefaultAsync(x => x.Id == appointmentId);
+        if (appointment is null) return null;
+        EnsureCanChange(appointment);
+
+        var assessor = await context.Users.FirstOrDefaultAsync(x =>
+            x.Id == request.AssessorId && x.Role == RoleNames.Assessor);
+        var client = await context.Clients.FirstOrDefaultAsync(x =>
+            x.Id == request.ClientId && x.Active);
+        if (assessor is null || client is null)
+        {
+            throw new InvalidOperationException("A valid assessor and active client are required.");
+        }
+
+        appointment.AssessorId = assessor.Id;
+        appointment.ClientId = client.Id;
+        appointment.CustomerName = client.Name;
+        appointment.SiteAddress = request.SiteAddress.Trim();
+        appointment.RequestDetails = request.RequestDetails.Trim();
+        appointment.AppointmentStart = request.AppointmentStart;
+        appointment.AppointmentEnd = request.AppointmentEnd;
+        await context.SaveChangesAsync();
+
+        return MapAppointment(appointment, assessor.Name, client.Name);
+    }
+
+    public async Task<bool> CancelAsync(int appointmentId)
+    {
+        var appointment = await context.Appointments
+            .Include(x => x.Quote)
+            .FirstOrDefaultAsync(x => x.Id == appointmentId);
+        if (appointment is null) return false;
+        EnsureCanChange(appointment);
+
+        context.Appointments.Remove(appointment);
+        await context.SaveChangesAsync();
+        return true;
+    }
+
+    private static void EnsureCanChange(Appointment appointment)
+    {
+        if (appointment.Quote is not null)
+        {
+            throw new InvalidOperationException("Appointments with a submitted quote cannot be changed or removed.");
+        }
+        if (appointment.Status != "scheduled")
+        {
+            throw new InvalidOperationException("Only scheduled appointments can be changed or removed.");
+        }
+    }
+
+    private static AppointmentDto MapAppointment(Appointment appointment, string assessorName, string clientName)
+    {
+        return new AppointmentDto
+        {
+            Id = appointment.Id,
+            AssessorId = appointment.AssessorId,
+            AssessorName = assessorName,
+            ClientId = appointment.ClientId,
+            ClientName = clientName,
+            CustomerName = appointment.CustomerName,
+            SiteAddress = appointment.SiteAddress,
+            RequestDetails = appointment.RequestDetails,
+            AppointmentStart = appointment.AppointmentStart,
+            AppointmentEnd = appointment.AppointmentEnd,
+            Status = appointment.Status,
+            CalendarType = "appointment"
+        };
+    }
 }

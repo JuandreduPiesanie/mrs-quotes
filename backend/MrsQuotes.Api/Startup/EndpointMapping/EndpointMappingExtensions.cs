@@ -61,6 +61,13 @@ public static class EndpointMappingExtensions
                 handler.Create(request))
             .RequireAuthorization(PolicyNames.Schedule)
             .WithValidation<CreateAppointmentRequest>();
+        app.MapPut("/api/appointments/{id:int}", (AppointmentHandler handler, int id, CreateAppointmentRequest request) =>
+                handler.Update(id, request))
+            .RequireAuthorization(PolicyNames.Schedule)
+            .WithValidation<CreateAppointmentRequest>();
+        app.MapPatch("/api/appointments/{id:int}/cancel", (AppointmentHandler handler, int id) =>
+                handler.Cancel(id))
+            .RequireAuthorization(PolicyNames.Schedule);
 
         app.MapGet("/api/quotes", (QuoteHandler handler, int? assessorId, string? status, ClaimsPrincipal principal) =>
                 handler.GetQuotes(assessorId, status, principal))

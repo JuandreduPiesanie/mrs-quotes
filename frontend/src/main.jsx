@@ -171,6 +171,8 @@ function createApi(token) {
     }),
     clients: (search = '') => request(`/clients${search ? `?search=${encodeURIComponent(search)}` : ''}`),
     createAppointment: (body) => request('/appointments', { method: 'POST', body: JSON.stringify(body) }),
+    updateAppointment: (id, body) => request(`/appointments/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    cancelAppointment: (id) => request(`/appointments/${id}/cancel`, { method: 'PATCH' }),
     quotes: (assessorId, status = 'submitted') => {
       const params = new URLSearchParams({ status });
       if (assessorId && assessorId !== 'all') params.set('assessorId', assessorId);
@@ -264,7 +266,9 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
   }
 
   function updateQty(id, quantity) {
-    setSelected((current) => current.map((item) => item.priceItemId === id ? { ...item, quantity } : item));
+    setSelected((current) => current.map((item) => item.priceItemId === id
+      ? { ...item, quantity: quantity === '' ? '' : Number(quantity) }
+      : item));
   }
 
   function removeItem(id) {
@@ -278,7 +282,10 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
       setMessage(photos.length ? 'Optimizing photos for upload...' : '');
       const preparedPhotos = await preparePhotosForUpload(photos);
       const body = new FormData();
-      body.append('payload', JSON.stringify({ appointmentId: appointment?.id, items: selected }));
+      body.append('payload', JSON.stringify({
+        appointmentId: appointment?.id,
+        items: selected.map((item) => ({ ...item, quantity: Number(item.quantity) }))
+      }));
       preparedPhotos.forEach((file) => body.append('photos', file));
       if (existingQuote) await api.updateQuote(existingQuote.id, body);
       else await api.submitQuote(body);
@@ -353,6 +360,7 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
   const [assessors, setAssessors] = useState([]);
   const [assessorId, setAssessorId] = useState('');
   const [appointments, setAppointments] = useState([]);
+  const [editingAppointment, setEditingAppointment] = useState(null);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
 
   const isAssessor = role === ROLES.ASSESSOR;
@@ -363,14 +371,15 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
   const canFilterAssessors = isScheduleAdministrator || isManagement || isAdmin;
   const isQuoteTaskCalendar = isQuoteAdministrator || isManagement;
   const canStartQuote = isAssessor || isAdmin;
+  const canManageAppointments = isScheduleAdministrator || isAdmin;
 
   useEffect(() => {
     if (!canFilterAssessors) return;
     api.assessors().then((rows) => {
       setAssessors(rows);
-      setAssessorId(isScheduleAdministrator ? String(rows[0]?.id || '') : '');
+      setAssessorId('');
     });
-  }, [api, canFilterAssessors, isScheduleAdministrator]);
+  }, [api, canFilterAssessors]);
 
   useEffect(() => {
     api.appointments(assessorId).then(setAppointments);
@@ -391,7 +400,13 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
 
   function handleEventClick(item) {
     if (item.calendar_type === 'quote_task') onOpenQuote?.(item.quote_id);
+    else if (canManageAppointments) setEditingAppointment(item);
     else if (canStartQuote) onStartQuote?.(item);
+  }
+
+  async function appointmentChanged() {
+    setEditingAppointment(null);
+    setAppointments(await api.appointments(assessorId));
   }
 
   const subtitle = isQuoteTaskCalendar
@@ -408,7 +423,7 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
       <div className="calendar-toolbar">
         {canFilterAssessors && (
           <select className="filter-select" value={assessorId} onChange={(e) => setAssessorId(e.target.value)}>
-            {(isManagement || isAdmin) && <option value="">All assessors</option>}
+            <option value="">All assessors</option>
             {assessors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         )}
@@ -429,11 +444,14 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
             <div className="calendar-day-body">
               {appointmentsForDay(day).map((appt) => (
                 <button type="button" className={appt.calendar_type === 'quote_task' ? 'calendar-event quote-task-event' : 'calendar-event'} key={`${appt.calendar_type}-${appt.id || appt.quote_id}`} onClick={() => handleEventClick(appt)}>
-                  <span>{formatTime(appt.appointment_start)}</span>
+                  <span>
+                    {formatTime(appt.appointment_start)}
+                    {appt.appointment_end ? ` - ${formatTime(appt.appointment_end)}` : ''}
+                  </span>
                   <strong>{appt.quote_number || appt.client_name || appt.customer_name}</strong>
                   <small>{appt.client_name || appt.customer_name}</small>
                   <small>{appt.site_address}</small>
-                  {(isManagement || isAdmin) && appt.assessor_name && <small>Assessor: {appt.assessor_name}</small>}
+                  {appt.assessor_name && <small>Assessor: {appt.assessor_name}</small>}
                   {isManagement && appt.quote_administrator_name && <small>Quote admin: {appt.quote_administrator_name}</small>}
                 </button>
               ))}
@@ -442,9 +460,120 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
           </div>
         ))}
       </div>
+      {editingAppointment && (
+        <AppointmentEditorDialog
+          api={api}
+          appointment={editingAppointment}
+          assessors={assessors}
+          canStartQuote={isAdmin}
+          onStartQuote={(appointment) => {
+            setEditingAppointment(null);
+            onStartQuote?.(appointment);
+          }}
+          onChanged={appointmentChanged}
+          onClose={() => setEditingAppointment(null)}
+        />
+      )}
     </section>
   );
 }
+
+function AppointmentEditorDialog({ api, appointment, assessors, canStartQuote, onStartQuote, onChanged, onClose }) {
+  const [form, setForm] = useState({
+    assessorId: appointment.assessor_id,
+    clientId: appointment.client_id,
+    siteAddress: appointment.site_address,
+    requestDetails: appointment.request_details,
+    appointmentStart: appointment.appointment_start,
+    appointmentEnd: appointment.appointment_end || ''
+  });
+  const [clientSearch, setClientSearch] = useState(appointment.client_name || appointment.customer_name || '');
+  const [clients, setClients] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.clients(clientSearch).then(setClients).catch((err) => setError(err.message));
+  }, [api, clientSearch]);
+
+  function chooseClientName(value) {
+    setClientSearch(value);
+    const selected = clients.find((client) => client.name.toLowerCase() === value.trim().toLowerCase());
+    setForm((current) => ({ ...current, clientId: selected?.id || '' }));
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    setError('');
+    if (!form.clientId) {
+      setError('Select a client from the suggestions.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.updateAppointment(appointment.id, form);
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelAppointment() {
+    if (!window.confirm('Cancel and permanently remove this appointment? This cannot be undone.')) return;
+    setSaving(true);
+    setError('');
+    try {
+      await api.cancelAppointment(appointment.id);
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Edit appointment</DialogTitle>
+      <DialogContent>
+        <form className="stack appointment-editor" onSubmit={save}>
+          <label>Assessor
+            <select value={form.assessorId} onChange={(event) => setForm({ ...form, assessorId: event.target.value })}>
+              {assessors.map((assessor) => <option key={assessor.id} value={assessor.id}>{assessor.name}</option>)}
+            </select>
+          </label>
+          <label>Client
+            <input
+              required
+              list="appointment-client-options"
+              value={clientSearch}
+              onChange={(event) => chooseClientName(event.target.value)}
+              placeholder="Search and select a client"
+            />
+            <datalist id="appointment-client-options">
+              {clients.map((client) => <option key={client.id} value={client.name} />)}
+            </datalist>
+          </label>
+          <label>Site address<input required value={form.siteAddress} onChange={(event) => setForm({ ...form, siteAddress: event.target.value })} /></label>
+          <label>Request details<textarea required value={form.requestDetails} onChange={(event) => setForm({ ...form, requestDetails: event.target.value })} /></label>
+          <div className="grid two">
+            <DateTimePicker label="Start" value={form.appointmentStart} onChange={(value) => setForm({ ...form, appointmentStart: value })} required />
+            <DateTimePicker label="End" value={form.appointmentEnd} onChange={(value) => setForm({ ...form, appointmentEnd: value })} />
+          </div>
+          {error && <div className="error">{error}</div>}
+          <div className="appointment-editor-actions">
+            <button className="primary" disabled={saving}><Check size={18} />Save changes</button>
+            {canStartQuote && <button type="button" className="secondary" disabled={saving} onClick={() => onStartQuote(appointment)}>Start quote</button>}
+            <button type="button" className="danger" disabled={saving} onClick={cancelAppointment}>Cancel appointment</button>
+            <button type="button" className="secondary" disabled={saving} onClick={onClose}>Close</button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ScheduleView({ api, onCreated }) {
   const [assessors, setAssessors] = useState([]);
   const [clients, setClients] = useState([]);
@@ -577,7 +706,7 @@ function AssignmentsView({ api }) {
         ))}
         {assessors.length === 0 && !error && <div className="empty">No Quote Assessors are available.</div>}
       </div>
-      <p className="assignment-note">Changing an assignment moves that assessor's outstanding submitted quotes and calendar work to the selected Quote Administrator.</p>
+      <p className="assignment-note">Changing an assignment affects newly submitted quotes only. Existing quotes remain with the Quote Administrator captured at submission.</p>
       {message && <div className="success">{message}</div>}
       {error && <div className="error">{error}</div>}
     </section>
@@ -1128,7 +1257,9 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
   }
 
   function updateQty(id, quantity) {
-    setSelected((current) => current.map((item) => item.priceItemId === id ? { ...item, quantity } : item));
+    setSelected((current) => current.map((item) => item.priceItemId === id
+      ? { ...item, quantity: quantity === '' ? '' : Number(quantity) }
+      : item));
   }
 
   function removeItem(id) {
@@ -1142,7 +1273,10 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
       setMessage(photos.length ? 'Optimizing photos for upload...' : '');
       const preparedPhotos = await preparePhotosForUpload(photos);
       const body = new FormData();
-      body.append('payload', JSON.stringify({ appointmentId: quote.appointment_id, items: selected }));
+      body.append('payload', JSON.stringify({
+        appointmentId: quote.appointment_id,
+        items: selected.map((item) => ({ ...item, quantity: Number(item.quantity) }))
+      }));
       preparedPhotos.forEach((file) => body.append('photos', file));
       await api.updateQuote(quote.id, body);
       await onSaved();

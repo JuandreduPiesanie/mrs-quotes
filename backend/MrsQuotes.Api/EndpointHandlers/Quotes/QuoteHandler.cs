@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using MrsQuotes.Api.Providers.Quotes;
 using MrsQuotes.Api.Providers.Storage;
@@ -13,7 +14,11 @@ public sealed class QuoteHandler(
     IValidator<QuotePayload> payloadValidator,
     PhotoDownloadTicketService downloadTickets)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString
+    };
 
     public async Task<IResult> GetQuotes(int? assessorId, string? status, ClaimsPrincipal principal)
     {

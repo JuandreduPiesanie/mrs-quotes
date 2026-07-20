@@ -491,6 +491,35 @@ textarea { min-height: 92px; resize: vertical; }
   box-shadow: 0 0 0 3px rgba(23, 107, 98, .16);
 }
 
+.appointment-editor {
+  padding-top: 8px;
+}
+
+.appointment-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+button.danger {
+  border: 1px solid #b42318;
+  background: #fff;
+  color: #b42318;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+button.danger:hover {
+  background: #fff1f0;
+}
+
+button.danger:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
 .archive-confirmation {
   grid-column: 1 / -1;
   flex-direction: row !important;
