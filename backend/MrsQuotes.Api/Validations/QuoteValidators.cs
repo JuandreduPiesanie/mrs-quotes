@@ -27,6 +27,9 @@ public sealed class CompleteQuoteRequestValidator : AbstractValidator<CompleteQu
             .MaximumLength(2048)
             .Must(BeSupportedArchiveUrl)
             .WithMessage("Enter a valid HTTPS OneDrive or SharePoint folder URL.");
+        RuleFor(x => x.ArchiveVerified)
+            .Equal(true)
+            .WithMessage("Confirm that every quote photo has been verified in the archive folder.");
     }
 
     private static bool BeSupportedArchiveUrl(string value)

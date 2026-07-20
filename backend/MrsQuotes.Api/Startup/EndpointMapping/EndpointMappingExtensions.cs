@@ -69,13 +69,17 @@ public static class EndpointMappingExtensions
                 handler.GetQuote(id, principal))
             .RequireAuthorization(PolicyNames.QuoteDirectory);
         app.MapGet("/api/quotes/{id:int}/photos/{photoId:int}",
-                (QuoteHandler handler, int id, int photoId, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
-                    handler.GetPhoto(id, photoId, principal, cancellationToken))
+                (QuoteHandler handler, int id, int photoId, bool? thumbnail, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
+                    handler.GetPhoto(id, photoId, thumbnail ?? false, principal, cancellationToken))
             .RequireAuthorization(PolicyNames.QuoteDirectory);
-        app.MapGet("/api/quotes/{id:int}/photos.zip",
+        app.MapPost("/api/quotes/{id:int}/photos-download",
                 (QuoteHandler handler, int id, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
-                    handler.DownloadPhotos(id, principal, cancellationToken))
+                    handler.CreatePhotoDownloadTicket(id, principal, cancellationToken))
             .RequireAuthorization(PolicyNames.QuoteAdministrator);
+        app.MapGet("/api/quotes/{id:int}/photos.zip",
+                (QuoteHandler handler, int id, string? ticket, CancellationToken cancellationToken) =>
+                    handler.DownloadPhotos(id, ticket, cancellationToken))
+            .AllowAnonymous();
         app.MapPatch("/api/quotes/{id:int}/complete",
                 (QuoteHandler handler, int id, CompleteQuoteRequest request, ClaimsPrincipal principal) =>
                     handler.Complete(id, request, principal))

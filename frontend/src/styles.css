@@ -491,6 +491,19 @@ textarea { min-height: 92px; resize: vertical; }
   box-shadow: 0 0 0 3px rgba(23, 107, 98, .16);
 }
 
+.archive-confirmation {
+  grid-column: 1 / -1;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.archive-confirmation input {
+  width: 20px !important;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
 .photo-viewer {
   position: fixed;
   inset: 0;

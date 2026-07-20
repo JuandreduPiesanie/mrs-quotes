@@ -5,6 +5,8 @@ public sealed class Quote
     public int Id { get; set; }
     public int AssessorId { get; set; }
     public User Assessor { get; set; } = null!;
+    public int? QuoteAdministratorId { get; set; }
+    public User? QuoteAdministrator { get; set; }
     public int? AppointmentId { get; set; }
     public Appointment? Appointment { get; set; }
     public int? ClientId { get; set; }
@@ -19,6 +21,7 @@ public sealed class Quote
     public string? PhotoArchiveUrl { get; set; }
     public int ArchivedPhotoCount { get; set; }
     public DateTime? PhotosPurgedAt { get; set; }
+    public DateTime? PhotoPurgeEligibleAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<QuoteItem> Items { get; set; } = new();

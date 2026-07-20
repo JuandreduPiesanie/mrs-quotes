@@ -33,11 +33,14 @@ public sealed class CompletedQuotePhotoPurgeWorker(
         using var scope = scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<MrsQuotesDbContext>();
         var photoStorage = scope.ServiceProvider.GetRequiredService<IPhotoStorage>();
+        var now = DateTime.UtcNow;
         var quotes = await context.Quotes
             .Include(x => x.Photos)
             .Where(x => x.Status == "completed"
                 && x.PhotoArchiveUrl != null
-                && x.PhotosPurgedAt == null)
+                && x.PhotosPurgedAt == null
+                && x.PhotoPurgeEligibleAt != null
+                && x.PhotoPurgeEligibleAt <= now)
             .Take(100)
             .ToListAsync(cancellationToken);
 

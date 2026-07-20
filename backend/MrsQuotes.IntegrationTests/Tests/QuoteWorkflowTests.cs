@@ -85,7 +85,8 @@ public sealed class QuoteWorkflowTests
             new CompleteQuoteRequest
             {
                 ErpQuoteNumber = "ERP-1001",
-                PhotoArchiveUrl = "https://mrsquotes.sharepoint.com/sites/quotes/MRS-Q-000001"
+                PhotoArchiveUrl = "https://mrsquotes.sharepoint.com/sites/quotes/MRS-Q-000001",
+                ArchiveVerified = true
             });
         complete.EnsureSuccessStatusCode();
 

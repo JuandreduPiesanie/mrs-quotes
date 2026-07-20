@@ -19,7 +19,7 @@ Persistent volumes:
 - mrs-quotes-sql-data stores SQL Server data.
 - mrs-quotes-uploads stores quote photos.
 
-The uploads volume is temporary working storage for outstanding quotes. Completing a quote requires an ERP quote number and a OneDrive or SharePoint photo-folder URL. The API saves that archive reference and then removes the completed quote's local photo files and photo rows. Completed quote records remain available through the Completed Quotes view.
+The uploads volume is temporary working storage for outstanding quotes. Completing a quote requires an ERP quote number, a OneDrive or SharePoint photo-folder URL, and confirmation that every photo was verified in that folder. The API saves the archive reference, retains local recovery copies for 48 hours, and then removes the completed quote's local photo files and photo rows. Completed quote records remain available through the Completed Quotes view.
 
 The API retries database migrations for about one minute while SQL Server starts. Check startup with:
 

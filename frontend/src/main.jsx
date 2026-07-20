@@ -78,6 +78,7 @@ function App() {
   const isScheduleAdministrator = role === ROLES.SCHEDULE_ADMINISTRATOR;
   const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
   const isManagement = role === ROLES.MANAGEMENT;
+  const canBuildQuotes = isAssessor || isAdmin;
   const canViewQuotes = isAdmin || isAssessor || isQuoteAdministrator || isManagement;
 
   return (
@@ -108,7 +109,7 @@ function App() {
       </aside>
 
       <main>
-        {isAssessor && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView('calendar'); }} />}
+        {canBuildQuotes && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView('calendar'); }} />}
         {view === 'calendar' && <CalendarView api={api} role={role} onStartQuote={(appointment) => { setQuoteAppointment(appointment); setQuoteToEditId(appointment.quote_id || null); setView('quote'); }} onOpenQuote={(quoteId) => { setQuoteToOpenId(quoteId); setView('quotes'); }} />}
         {view === 'quotes' && canViewQuotes && <QuotesView api={api} role={role} initialQuoteId={quoteToOpenId} onOpenedInitialQuote={() => setQuoteToOpenId(null)} />}
         {(isAdmin || isScheduleAdministrator) && view === 'schedule' && <ScheduleView api={api} onCreated={() => setView('calendar')} />}
@@ -136,25 +137,13 @@ function createApi(token) {
     if (!res.ok) throw new Error(getErrorMessage(data, 'Something went wrong.'));
     return data;
   }
-  async function download(path, fallbackFileName = 'download.zip') {
-    const headers = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(`${API}${path}`, { headers });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(getErrorMessage(data, 'Download failed.'));
-    }
-    const blob = await res.blob();
-    const disposition = res.headers.get('content-disposition') || '';
-    const fileName = disposition.match(/filename="?([^";]+)"?/)?.[1] || fallbackFileName;
-    const url = URL.createObjectURL(blob);
+  async function downloadQuotePhotos(id) {
+    const result = await request(`/quotes/${id}/photos-download`, { method: 'POST' });
     const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
+    link.href = `${API}${result.url}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
   }
   async function loadPhoto(path) {
     const headers = {};
@@ -189,12 +178,12 @@ function createApi(token) {
     },
     quote: (id) => request(`/quotes/${id}`),
     loadPhoto,
-    downloadQuotePhotos: (id, quoteNumber) => download(`/quotes/${id}/photos.zip`, `${quoteNumber || `Quote-${id}`}-photos.zip`),
+    downloadQuotePhotos,
     submitQuote: (form) => request('/quotes', { method: 'POST', body: form }),
     updateQuote: (id, form) => request(`/quotes/${id}`, { method: 'PUT', body: form }),
-    completeQuote: (id, erpQuoteNumber, photoArchiveUrl) => request(`/quotes/${id}/complete`, {
+    completeQuote: (id, erpQuoteNumber, photoArchiveUrl, archiveVerified) => request(`/quotes/${id}/complete`, {
       method: 'PATCH',
-      body: JSON.stringify({ erpQuoteNumber, photoArchiveUrl })
+      body: JSON.stringify({ erpQuoteNumber, photoArchiveUrl, archiveVerified })
     }),
   };
 }
@@ -285,10 +274,12 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
   async function submit(e) {
     e.preventDefault();
     setMessage('');
-    const body = new FormData();
-    body.append('payload', JSON.stringify({ appointmentId: appointment?.id, items: selected }));
-    photos.forEach((file) => body.append('photos', file));
     try {
+      setMessage(photos.length ? 'Optimizing photos for upload...' : '');
+      const preparedPhotos = await preparePhotosForUpload(photos);
+      const body = new FormData();
+      body.append('payload', JSON.stringify({ appointmentId: appointment?.id, items: selected }));
+      preparedPhotos.forEach((file) => body.append('photos', file));
       if (existingQuote) await api.updateQuote(existingQuote.id, body);
       else await api.submitQuote(body);
       setMessage(existingQuote ? 'Quote updated.' : 'Quote submitted to the quote administrator.');
@@ -365,11 +356,13 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
 
   const isAssessor = role === ROLES.ASSESSOR;
+  const isAdmin = role === ROLES.ADMIN;
   const isScheduleAdministrator = role === ROLES.SCHEDULE_ADMINISTRATOR;
   const isQuoteAdministrator = role === ROLES.QUOTE_ADMINISTRATOR;
-  const isManagement = role === ROLES.MANAGEMENT || role === ROLES.ADMIN;
-  const canFilterAssessors = isScheduleAdministrator || isManagement;
+  const isManagement = role === ROLES.MANAGEMENT;
+  const canFilterAssessors = isScheduleAdministrator || isManagement || isAdmin;
   const isQuoteTaskCalendar = isQuoteAdministrator || isManagement;
+  const canStartQuote = isAssessor || isAdmin;
 
   useEffect(() => {
     if (!canFilterAssessors) return;
@@ -398,14 +391,16 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
 
   function handleEventClick(item) {
     if (item.calendar_type === 'quote_task') onOpenQuote?.(item.quote_id);
-    else if (isAssessor) onStartQuote?.(item);
+    else if (canStartQuote) onStartQuote?.(item);
   }
 
   const subtitle = isQuoteTaskCalendar
     ? 'Outstanding submitted quotes awaiting ERP recapture.'
-    : isScheduleAdministrator
+      : isScheduleAdministrator
       ? 'Weekly appointment view by assessor.'
-      : 'Select an appointment to start the quick quote.';
+      : canStartQuote
+        ? 'Select an appointment to start the quick quote.'
+        : 'Weekly appointment view.';
 
   return (
     <section className="workspace calendar-workspace">
@@ -413,7 +408,7 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
       <div className="calendar-toolbar">
         {canFilterAssessors && (
           <select className="filter-select" value={assessorId} onChange={(e) => setAssessorId(e.target.value)}>
-            {isManagement && <option value="">All assessors</option>}
+            {(isManagement || isAdmin) && <option value="">All assessors</option>}
             {assessors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         )}
@@ -438,6 +433,7 @@ function CalendarView({ api, role, onStartQuote, onOpenQuote }) {
                   <strong>{appt.quote_number || appt.client_name || appt.customer_name}</strong>
                   <small>{appt.client_name || appt.customer_name}</small>
                   <small>{appt.site_address}</small>
+                  {(isManagement || isAdmin) && appt.assessor_name && <small>Assessor: {appt.assessor_name}</small>}
                   {isManagement && appt.quote_administrator_name && <small>Quote admin: {appt.quote_administrator_name}</small>}
                 </button>
               ))}
@@ -752,9 +748,8 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
   const [downloadMessage, setDownloadMessage] = useState('');
   const [erpQuoteNumber, setErpQuoteNumber] = useState('');
   const [photoArchiveUrl, setPhotoArchiveUrl] = useState('');
+  const [archiveVerified, setArchiveVerified] = useState(false);
   const [quoteStatus, setQuoteStatus] = useState('submitted');
-  const [photoUrls, setPhotoUrls] = useState({});
-  const [photoLoadError, setPhotoLoadError] = useState('');
 
   const isAdmin = role === ROLES.ADMIN;
   const isAssessor = role === ROLES.ASSESSOR;
@@ -778,39 +773,6 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     if (!initialQuoteId) return;
     openQuote(initialQuoteId).then(() => onOpenedInitialQuote?.());
   }, [initialQuoteId]);
-
-  useEffect(() => {
-    let disposed = false;
-    const createdUrls = [];
-    setPhotoUrls({});
-    setPhotoLoadError('');
-
-    if (!active?.photos?.length) return undefined;
-
-    Promise.allSettled(active.photos.map(async (photo) => {
-      const url = await api.loadPhoto(photo.url);
-      createdUrls.push(url);
-      return [photo.id, url];
-    })).then((results) => {
-      if (disposed) {
-        createdUrls.forEach((url) => URL.revokeObjectURL(url));
-        return;
-      }
-
-      const loaded = results
-        .filter((result) => result.status === 'fulfilled')
-        .map((result) => result.value);
-      setPhotoUrls(Object.fromEntries(loaded));
-      if (loaded.length !== active.photos.length) {
-        setPhotoLoadError('One or more photos could not be loaded.');
-      }
-    });
-
-    return () => {
-      disposed = true;
-      createdUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [api, active]);
 
   const filtered = quotes.filter((q) => `${q.quote_number} ${q.customer_name} ${q.site_address} ${q.assessor_name} ${q.quote_administrator_name || ''} ${q.erp_quote_number || ''}`.toLowerCase().includes(query.toLowerCase()));
 
@@ -860,7 +822,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     if (!active) return;
     setDownloadMessage('');
     try {
-      await api.completeQuote(active.id, erpQuoteNumber, photoArchiveUrl);
+      await api.completeQuote(active.id, erpQuoteNumber, photoArchiveUrl, archiveVerified);
       const completed = await api.quote(active.id);
       setQuoteStatus('completed');
       setActive(completed);
@@ -878,6 +840,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     setActive(quote);
     setErpQuoteNumber(quote.erp_quote_number || '');
     setPhotoArchiveUrl(quote.photo_archive_url || '');
+    setArchiveVerified(false);
   }
 
   function closeQuote() {
@@ -887,6 +850,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     setDownloadMessage('');
     setErpQuoteNumber('');
     setPhotoArchiveUrl('');
+    setArchiveVerified(false);
   }
 
   function renderQuoteDetail({ fullScreen = false } = {}) {
@@ -924,10 +888,14 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
               <div className="erp-complete-panel">
                 <label>ERP Quote Number<input required value={erpQuoteNumber} onChange={(e) => setErpQuoteNumber(e.target.value)} placeholder="Enter ERP quote number" /></label>
                 <label>OneDrive Photo Folder URL<input required type="url" value={photoArchiveUrl} onChange={(e) => setPhotoArchiveUrl(e.target.value)} placeholder="Paste the OneDrive or SharePoint folder link" /></label>
+                <label className="archive-confirmation">
+                  <input type="checkbox" checked={archiveVerified} onChange={(e) => setArchiveVerified(e.target.checked)} />
+                  <span>I verified that every quote photo is present in this archive folder.</span>
+                </label>
                 <button
                   className="primary"
                   type="button"
-                  disabled={!erpQuoteNumber.trim() || !photoArchiveUrl.trim()}
+                  disabled={!erpQuoteNumber.trim() || !photoArchiveUrl.trim() || !archiveVerified}
                   onClick={completeActiveQuote}
                 >
                   <Check size={18} />Mark as complete
@@ -941,7 +909,9 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
                   <span>
                     {active.photos_purged_at
                       ? `${active.archived_photo_count || 0} photo(s) were removed from the VPS after completion.`
-                      : 'The archive link is saved and local photo cleanup is pending.'}
+                      : active.photo_purge_eligible_at
+                        ? `Local photos are retained until ${formatDate(active.photo_purge_eligible_at)}, then purged automatically.`
+                        : 'The archive link is saved and local photo cleanup is pending.'}
                   </span>
                 </div>
                 {active.photo_archive_url
@@ -950,20 +920,17 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
               </div>
             )}
             {downloadMessage && <div className="error">{downloadMessage}</div>}
-            {photoLoadError && <div className="error">{photoLoadError}</div>}
             <div className="photo-grid">
               {active.photos.map((photo, index) => (
-                <button type="button" key={photo.id} disabled={!photoUrls[photo.id]} onClick={() => setPhotoIndex(index)}>
-                  {photoUrls[photo.id]
-                    ? <img src={photoUrls[photo.id]} alt={photo.original_name} />
-                    : <span>Loading photo...</span>}
+                <button type="button" key={photo.id} onClick={() => setPhotoIndex(index)}>
+                  <ProtectedPhoto api={api} path={photo.url} alt={photo.original_name} thumbnail />
                 </button>
               ))}
             </div>
             {photoIndex !== null && active.photos[photoIndex] && (
               <PhotoViewer
                 photos={active.photos}
-                photoUrls={photoUrls}
+                api={api}
                 index={photoIndex}
                 onChange={setPhotoIndex}
                 onClose={() => setPhotoIndex(null)}
@@ -1046,7 +1013,52 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     </section>
   );
 }
-function PhotoViewer({ photos, photoUrls, index, onChange, onClose }) {
+function ProtectedPhoto({ api, path, alt, thumbnail = false, eager = false }) {
+  const imageRef = useRef(null);
+  const [shouldLoad, setShouldLoad] = useState(eager);
+  const [src, setSrc] = useState('');
+
+  useEffect(() => {
+    if (eager || shouldLoad) return undefined;
+    const element = imageRef.current;
+    if (!element || !('IntersectionObserver' in window)) {
+      setShouldLoad(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setShouldLoad(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [eager, shouldLoad]);
+
+  useEffect(() => {
+    if (!shouldLoad) return undefined;
+    let disposed = false;
+    let objectUrl = '';
+    const separator = path.includes('?') ? '&' : '?';
+    api.loadPhoto(thumbnail ? `${path}${separator}thumbnail=true` : path)
+      .then((url) => {
+        objectUrl = url;
+        if (disposed) URL.revokeObjectURL(url);
+        else setSrc(url);
+      })
+      .catch(() => {
+        if (!disposed) setSrc('');
+      });
+    return () => {
+      disposed = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [api, path, shouldLoad, thumbnail]);
+
+  return <img ref={imageRef} src={src || undefined} alt={src ? alt : `Loading ${alt}`} loading={eager ? 'eager' : 'lazy'} />;
+}
+
+function PhotoViewer({ photos, api, index, onChange, onClose }) {
   const photo = photos[index];
   const canGoBack = index > 0;
   const canGoForward = index < photos.length - 1;
@@ -1071,7 +1083,7 @@ function PhotoViewer({ photos, photoUrls, index, onChange, onClose }) {
             <ChevronLeftIcon fontSize="large" />
           </IconButton>
           <Box className="photo-slider-image-wrap">
-            <img src={photoUrls[photo.id]} alt={photo.original_name} />
+            <ProtectedPhoto key={photo.id} api={api} path={photo.url} alt={photo.original_name} eager />
           </Box>
           <IconButton className="photo-slider-arrow" onClick={next} disabled={!canGoForward} aria-label="Next photo">
             <ChevronRightIcon fontSize="large" />
@@ -1080,7 +1092,7 @@ function PhotoViewer({ photos, photoUrls, index, onChange, onClose }) {
         <Box className="photo-slider-strip">
           {photos.map((item, itemIndex) => (
             <button type="button" className={itemIndex === index ? 'active' : ''} key={item.id} onClick={() => onChange(itemIndex)}>
-              <img src={photoUrls[item.id]} alt={item.original_name} />
+              <ProtectedPhoto api={api} path={item.url} alt={item.original_name} thumbnail />
             </button>
           ))}
         </Box>
@@ -1126,10 +1138,12 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
   async function submit(e) {
     e.preventDefault();
     setMessage('');
-    const body = new FormData();
-    body.append('payload', JSON.stringify({ items: selected }));
-    photos.forEach((file) => body.append('photos', file));
     try {
+      setMessage(photos.length ? 'Optimizing photos for upload...' : '');
+      const preparedPhotos = await preparePhotosForUpload(photos);
+      const body = new FormData();
+      body.append('payload', JSON.stringify({ appointmentId: quote.appointment_id, items: selected }));
+      preparedPhotos.forEach((file) => body.append('photos', file));
       await api.updateQuote(quote.id, body);
       await onSaved();
     } catch (err) {
@@ -1182,6 +1196,49 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
       <button className="primary"><Check size={18} />Save changes</button>
     </form>
   );
+}
+
+async function preparePhotosForUpload(files) {
+  const prepared = [];
+  for (const file of files) {
+    prepared.push(await optimizePhoto(file));
+  }
+  const totalBytes = prepared.reduce((total, file) => total + file.size, 0);
+  if (totalBytes > 75 * 1024 * 1024) {
+    throw new Error('The optimized photos exceed the 75 MB limit for one submission.');
+  }
+  return prepared;
+}
+
+async function optimizePhoto(file) {
+  const compressibleTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!compressibleTypes.has(file.type) || typeof createImageBitmap !== 'function') return file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxDimension = 1920;
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size <= 2 * 1024 * 1024) {
+      bitmap.close();
+      return file;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+    if (!blob || blob.size >= file.size) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    return new File([blob], `${baseName}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: file.lastModified
+    });
+  } catch {
+    return file;
+  }
 }
 
 function PageTitle({ title, subtitle }) {

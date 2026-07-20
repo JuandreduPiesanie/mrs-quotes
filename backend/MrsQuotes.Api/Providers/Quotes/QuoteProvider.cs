@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using Microsoft.EntityFrameworkCore;
 using MrsQuotes.Api.Database;
 using MrsQuotes.Api.Database.Models;
@@ -10,8 +9,7 @@ namespace MrsQuotes.Api.Providers.Quotes;
 
 public sealed class QuoteProvider(
     MrsQuotesDbContext context,
-    IPhotoStorage photoStorage,
-    ILogger<QuoteProvider> logger) : IQuoteProvider
+    IPhotoStorage photoStorage) : IQuoteProvider
 {
     public async Task<List<QuoteDto>> GetQuotesAsync(
         int userId,
@@ -35,7 +33,7 @@ public sealed class QuoteProvider(
         query = role switch
         {
             RoleNames.Assessor => query.Where(x => x.AssessorId == userId),
-            RoleNames.QuoteAdministrator => query.Where(x => x.Assessor.QuoteAdministratorId == userId),
+            RoleNames.QuoteAdministrator => query.Where(x => x.QuoteAdministratorId == userId),
             RoleNames.Management or RoleNames.Admin => query,
             _ => query.Where(_ => false)
         };
@@ -49,8 +47,8 @@ public sealed class QuoteProvider(
             Id = x.Id,
             AssessorId = x.AssessorId,
             AssessorName = x.Assessor.Name,
-            QuoteAdministratorId = x.Assessor.QuoteAdministratorId,
-            QuoteAdministratorName = x.Assessor.QuoteAdministrator != null ? x.Assessor.QuoteAdministrator.Name : null,
+            QuoteAdministratorId = x.QuoteAdministratorId,
+            QuoteAdministratorName = x.QuoteAdministrator != null ? x.QuoteAdministrator.Name : null,
             AppointmentId = x.AppointmentId,
             ClientId = x.ClientId,
             QuoteNumber = x.QuoteNumber,
@@ -63,6 +61,7 @@ public sealed class QuoteProvider(
             PhotoArchiveUrl = x.PhotoArchiveUrl,
             ArchivedPhotoCount = x.ArchivedPhotoCount,
             PhotosPurgedAt = x.PhotosPurgedAt,
+            PhotoPurgeEligibleAt = x.PhotoPurgeEligibleAt,
             CompletedAt = x.CompletedAt,
             CreatedAt = x.CreatedAt,
             PhotoCount = x.Status == "completed" ? x.ArchivedPhotoCount : x.Photos.Count
@@ -72,7 +71,8 @@ public sealed class QuoteProvider(
     public async Task<QuoteDto?> GetQuoteAsync(int quoteId, int userId, string role)
     {
         var quote = await context.Quotes.AsNoTracking()
-            .Include(x => x.Assessor).ThenInclude(x => x.QuoteAdministrator)
+            .Include(x => x.Assessor)
+            .Include(x => x.QuoteAdministrator)
             .Include(x => x.Items)
             .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId);
@@ -82,6 +82,7 @@ public sealed class QuoteProvider(
 
     public async Task<QuoteCreatedDto> CreateAsync(
         int userId,
+        string role,
         QuotePayload payload,
         IReadOnlyList<PhotoUpload> photos,
         CancellationToken cancellationToken)
@@ -89,7 +90,9 @@ public sealed class QuoteProvider(
         if (photos.Count > 50) throw new InvalidOperationException("You can upload a maximum of 50 photos per quote.");
         var appointment = await context.Appointments
             .Include(x => x.Client)
-            .FirstOrDefaultAsync(x => x.Id == payload.AppointmentId && x.AssessorId == userId, cancellationToken);
+            .Include(x => x.Assessor)
+            .FirstOrDefaultAsync(x => x.Id == payload.AppointmentId
+                && (role == RoleNames.Admin || x.AssessorId == userId), cancellationToken);
         if (appointment is null)
         {
             throw new InvalidOperationException("Selected appointment was not found for this assessor.");
@@ -111,7 +114,8 @@ public sealed class QuoteProvider(
 
             var quote = new Quote
             {
-                AssessorId = userId,
+                AssessorId = appointment.AssessorId,
+                QuoteAdministratorId = appointment.Assessor.QuoteAdministratorId,
                 AppointmentId = appointment.Id,
                 ClientId = appointment.ClientId,
                 CustomerName = appointment.CustomerName,
@@ -159,6 +163,7 @@ public sealed class QuoteProvider(
         if (photos.Count > 50) throw new InvalidOperationException("You can upload a maximum of 50 photos per quote.");
         var quote = await context.Quotes
             .Include(x => x.Items)
+            .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId, cancellationToken);
         if (quote is null) return false;
         if (quote.Status != "submitted")
@@ -168,6 +173,10 @@ public sealed class QuoteProvider(
         if (role != RoleNames.Admin && quote.AssessorId != userId)
         {
             throw new UnauthorizedAccessException("You can only edit your own quotes.");
+        }
+        if (quote.Photos.Count + photos.Count > 50)
+        {
+            throw new InvalidOperationException("A quote can contain a maximum of 50 photos.");
         }
 
         var pricedItems = await PriceItemsAsync(payload.Items, cancellationToken);
@@ -211,7 +220,6 @@ public sealed class QuoteProvider(
         string photoArchiveUrl)
     {
         var quote = await context.Quotes
-            .Include(x => x.Assessor)
             .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId);
         if (quote is null || !CanAccess(quote, userId, role)) return false;
@@ -227,35 +235,10 @@ public sealed class QuoteProvider(
         quote.ArchivedPhotoCount = photosToPurge.Count;
         quote.CompletedAt = completedAt;
         quote.PhotosPurgedAt = photosToPurge.Count == 0 ? completedAt : null;
+        quote.PhotoPurgeEligibleAt = photosToPurge.Count == 0
+            ? completedAt
+            : completedAt.AddHours(48);
         await context.SaveChangesAsync();
-
-        var deletedPhotos = new List<QuotePhoto>();
-        foreach (var photo in photosToPurge)
-        {
-            try
-            {
-                await photoStorage.DeleteAsync(photo.FileName);
-                deletedPhotos.Add(photo);
-            }
-            catch (Exception exception)
-            {
-                logger.LogError(
-                    exception,
-                    "Unable to purge photo {PhotoId} for completed quote {QuoteId}.",
-                    photo.Id,
-                    quote.Id);
-            }
-        }
-
-        if (deletedPhotos.Count > 0)
-        {
-            context.QuotePhotos.RemoveRange(deletedPhotos);
-            if (deletedPhotos.Count == photosToPurge.Count)
-            {
-                quote.PhotosPurgedAt = DateTime.UtcNow;
-            }
-            await context.SaveChangesAsync();
-        }
         return true;
     }
 
@@ -266,30 +249,23 @@ public sealed class QuoteProvider(
         CancellationToken cancellationToken)
     {
         var quote = await context.Quotes.AsNoTracking()
-            .Include(x => x.Assessor)
             .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId, cancellationToken);
         if (quote is null || quote.Status != "submitted" || !CanAccess(quote, userId, role)) return null;
         if (quote.Photos.Count == 0) throw new InvalidOperationException("This quote has no photos to download.");
 
-        await using var output = new MemoryStream();
-        using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        var files = new List<QuoteArchiveFile>();
+        var index = 0;
+        foreach (var photo in quote.Photos)
         {
-            var index = 0;
-            foreach (var photo in quote.Photos)
-            {
-                var path = photoStorage.GetPath(photo.FileName);
-                if (!File.Exists(path)) continue;
-                index++;
-                var safeName = string.Join("-", photo.OriginalName.Split(Path.GetInvalidFileNameChars()));
-                var entry = archive.CreateEntry($"{index:00}-{safeName}", CompressionLevel.Fastest);
-                await using var entryStream = entry.Open();
-                await using var fileStream = File.OpenRead(path);
-                await fileStream.CopyToAsync(entryStream, cancellationToken);
-            }
+            var path = photoStorage.GetPath(photo.FileName);
+            if (!File.Exists(path)) continue;
+            index++;
+            var safeName = string.Join("-", photo.OriginalName.Split(Path.GetInvalidFileNameChars()));
+            files.Add(new QuoteArchiveFile(path, $"{index:00}-{safeName}"));
         }
-        if (output.Length == 0) throw new InvalidOperationException("The photo files could not be found on disk.");
-        return new QuoteArchive(output.ToArray(), $"{quote.QuoteNumber}-photos.zip");
+        if (files.Count == 0) throw new InvalidOperationException("The photo files could not be found on disk.");
+        return new QuoteArchive(files, $"{quote.QuoteNumber}-photos.zip");
     }
 
     public async Task<QuotePhotoFile?> GetPhotoAsync(
@@ -297,10 +273,10 @@ public sealed class QuoteProvider(
         int photoId,
         int userId,
         string role,
+        bool thumbnail,
         CancellationToken cancellationToken)
     {
         var quote = await context.Quotes.AsNoTracking()
-            .Include(x => x.Assessor)
             .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId, cancellationToken);
         if (quote is null || quote.Status != "submitted" || !CanAccess(quote, userId, role)) return null;
@@ -311,9 +287,21 @@ public sealed class QuoteProvider(
         var path = photoStorage.GetPath(photo.FileName);
         if (!File.Exists(path)) return null;
 
-        return new QuotePhotoFile(
-            await File.ReadAllBytesAsync(path, cancellationToken),
-            photo.MimeType);
+        if (thumbnail)
+        {
+            try
+            {
+                return new QuotePhotoFile(
+                    await photoStorage.GetThumbnailPathAsync(photo.FileName, cancellationToken),
+                    "image/jpeg");
+            }
+            catch (InvalidDataException)
+            {
+                return new QuotePhotoFile(path, photo.MimeType);
+            }
+        }
+
+        return new QuotePhotoFile(path, photo.MimeType);
     }
 
     private async Task<List<QuoteItem>> PriceItemsAsync(
@@ -356,7 +344,7 @@ public sealed class QuoteProvider(
         {
             RoleNames.Admin or RoleNames.Management => true,
             RoleNames.Assessor => quote.AssessorId == userId,
-            RoleNames.QuoteAdministrator => quote.Assessor.QuoteAdministratorId == userId,
+            RoleNames.QuoteAdministrator => quote.QuoteAdministratorId == userId,
             _ => false
         };
     }
@@ -368,8 +356,8 @@ public sealed class QuoteProvider(
             Id = quote.Id,
             AssessorId = quote.AssessorId,
             AssessorName = quote.Assessor.Name,
-            QuoteAdministratorId = quote.Assessor.QuoteAdministratorId,
-            QuoteAdministratorName = quote.Assessor.QuoteAdministrator?.Name,
+            QuoteAdministratorId = quote.QuoteAdministratorId,
+            QuoteAdministratorName = quote.QuoteAdministrator?.Name,
             AppointmentId = quote.AppointmentId,
             ClientId = quote.ClientId,
             QuoteNumber = quote.QuoteNumber,
@@ -382,6 +370,7 @@ public sealed class QuoteProvider(
             PhotoArchiveUrl = quote.PhotoArchiveUrl,
             ArchivedPhotoCount = quote.ArchivedPhotoCount,
             PhotosPurgedAt = quote.PhotosPurgedAt,
+            PhotoPurgeEligibleAt = quote.PhotoPurgeEligibleAt,
             CompletedAt = quote.CompletedAt,
             CreatedAt = quote.CreatedAt,
             PhotoCount = quote.Status == "completed" ? quote.ArchivedPhotoCount : quote.Photos.Count,

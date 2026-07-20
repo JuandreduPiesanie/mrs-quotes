@@ -11,6 +11,10 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next)
         {
             await next(context);
         }
+        catch (BadHttpRequestException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status400BadRequest, "Bad request", ex.Message);
+        }
         catch (InvalidOperationException ex)
         {
             await WriteProblem(context, StatusCodes.Status400BadRequest, "Bad request", ex.Message);

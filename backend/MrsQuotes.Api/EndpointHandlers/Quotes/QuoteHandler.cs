@@ -8,7 +8,10 @@ using MrsQuotes.Models.Quotes;
 
 namespace MrsQuotes.Api.EndpointHandlers.Quotes;
 
-public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayload> payloadValidator)
+public sealed class QuoteHandler(
+    IQuoteProvider provider,
+    IValidator<QuotePayload> payloadValidator,
+    PhotoDownloadTicketService downloadTickets)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -29,6 +32,7 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
         if (parsed.Error is not null) return parsed.Error;
         var result = await provider.CreateAsync(
             principal.UserId(),
+            principal.UserRole(),
             parsed.Payload!,
             parsed.Photos,
             cancellationToken);
@@ -71,7 +75,7 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
             : Results.NotFound(new { error = "Quote not found." });
     }
 
-    public async Task<IResult> DownloadPhotos(
+    public async Task<IResult> CreatePhotoDownloadTicket(
         int id,
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
@@ -83,12 +87,34 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
             cancellationToken);
         return archive is null
             ? Results.NotFound(new { error = "Quote not found." })
-            : Results.File(archive.Content, "application/zip", archive.FileName);
+            : Results.Ok(new
+            {
+                url = $"/quotes/{id}/photos.zip?ticket={downloadTickets.Create(id, principal.UserId(), principal.UserRole())}"
+            });
+    }
+
+    public async Task<IResult> DownloadPhotos(
+        int id,
+        string? ticket,
+        CancellationToken cancellationToken)
+    {
+        var downloadTicket = downloadTickets.Take(ticket, id);
+        if (downloadTicket is null) return Results.Unauthorized();
+
+        var archive = await provider.GetPhotoArchiveAsync(
+            id,
+            downloadTicket.UserId,
+            downloadTicket.Role,
+            cancellationToken);
+        return archive is null
+            ? Results.NotFound(new { error = "Quote not found." })
+            : new QuoteArchiveResult(archive);
     }
 
     public async Task<IResult> GetPhoto(
         int id,
         int photoId,
+        bool thumbnail,
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
     {
@@ -97,10 +123,11 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
             photoId,
             principal.UserId(),
             principal.UserRole(),
+            thumbnail,
             cancellationToken);
         return photo is null
             ? Results.NotFound(new { error = "Photo not found." })
-            : Results.File(photo.Content, photo.ContentType);
+            : Results.File(photo.Path, photo.ContentType, enableRangeProcessing: true);
     }
 
     private async Task<(QuotePayload? Payload, IReadOnlyList<PhotoUpload> Photos, IResult? Error)> ReadPayloadAsync(
@@ -136,6 +163,10 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
         if (form.Files.Count > 50)
         {
             return (null, [], Results.BadRequest(new { error = "You can upload a maximum of 50 photos per quote." }));
+        }
+        if (form.Files.Sum(file => file.Length) > 75L * 1024 * 1024)
+        {
+            return (null, [], Results.BadRequest(new { error = "Photos may total no more than 75 MB per submission." }));
         }
 
         var photos = form.Files.Select(file => new PhotoUpload(

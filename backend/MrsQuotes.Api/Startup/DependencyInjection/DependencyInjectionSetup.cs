@@ -36,7 +36,7 @@ public static class DependencyInjectionSetup
 
         services.Configure<FormOptions>(options =>
         {
-            options.MultipartBodyLengthLimit = 50L * 8 * 1024 * 1024;
+            options.MultipartBodyLengthLimit = 75L * 1024 * 1024;
         });
 
         services.AddScoped<AuthenticationHandler>();
@@ -53,6 +53,7 @@ public static class DependencyInjectionSetup
         services.AddScoped<IAppointmentProvider, AppointmentProvider>();
         services.AddScoped<IQuoteProvider, QuoteProvider>();
         services.AddScoped<IPhotoStorage, PhotoStorage>();
+        services.AddSingleton<PhotoDownloadTicketService>();
 
         services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
         services.AddScoped<IValidator<FirstAdminRequest>, FirstAdminRequestValidator>();

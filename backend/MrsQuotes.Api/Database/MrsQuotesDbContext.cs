@@ -77,6 +77,8 @@ public sealed class MrsQuotesDbContext(DbContextOptions<MrsQuotesDbContext> opti
             entity.Property(x => x.PhotoArchiveUrl).HasMaxLength(2048);
             entity.HasOne(x => x.Assessor).WithMany(x => x.Quotes)
                 .HasForeignKey(x => x.AssessorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.QuoteAdministrator).WithMany()
+                .HasForeignKey(x => x.QuoteAdministratorId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Appointment).WithOne(x => x.Quote)
                 .HasForeignKey<Quote>(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Client).WithMany(x => x.Quotes)

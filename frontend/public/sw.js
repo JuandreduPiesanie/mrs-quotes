@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mrs-quotes-v1';
+const CACHE_NAME = 'mrs-quotes-v2';
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -25,7 +25,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) {
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
     return;
   }
 

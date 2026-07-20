@@ -18,6 +18,7 @@ public sealed class CompleteQuoteRequest
 {
     public string ErpQuoteNumber { get; set; } = "";
     public string PhotoArchiveUrl { get; set; } = "";
+    public bool ArchiveVerified { get; set; }
 }
 
 public sealed class QuoteCreatedDto
@@ -60,6 +61,8 @@ public sealed class QuoteDto
     public int ArchivedPhotoCount { get; set; }
     [JsonPropertyName("photos_purged_at")]
     public DateTime? PhotosPurgedAt { get; set; }
+    [JsonPropertyName("photo_purge_eligible_at")]
+    public DateTime? PhotoPurgeEligibleAt { get; set; }
     [JsonPropertyName("completed_at")]
     public DateTime? CompletedAt { get; set; }
     [JsonPropertyName("created_at")]

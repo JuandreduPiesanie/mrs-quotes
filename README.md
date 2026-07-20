@@ -6,15 +6,15 @@ MRS Quotes schedules insurance-repair assessments and routes submitted quotes fr
 
 1. A Schedule Administrator creates an appointment for an assessor.
 2. The assessor completes the visit and submits the quote with line items and photos.
-3. The appointment leaves the assessor calendar and appears as an outstanding quote and calendar task for the assessor's assigned Quote Administrator.
+3. The appointment leaves the assessor calendar and appears as an outstanding quote and calendar task for the Quote Administrator captured when the quote is submitted. Later assessor reassignment does not move historical quotes.
 4. The Quote Administrator downloads the photos and uploads them to the company's OneDrive or SharePoint quote folder.
 5. Completion requires both the ERP quote number and the OneDrive or SharePoint folder URL.
-6. The system retains the completed quote and archive URL, then purges that quote's local photo files from the VPS.
+6. The Quote Administrator confirms every photo is present in the archive. The system retains the completed quote and archive URL, keeps local recovery copies for 48 hours, then purges them from the VPS.
 7. Management maintains assessor-to-Quote-Administrator assignments.
 
 ## Roles
 
-- Admin: unrestricted system access, user registration, roles, and assignments.
+- Admin: unrestricted system access, including completing the assessor quote workflow on behalf of the assessor assigned to an appointment, user registration, roles, and assignments.
 - Management: manages assessor assignments and has operational visibility.
 - Schedule Administrator: schedules assessor appointments.
 - Quote Administrator: receives submitted quotes from assigned assessors.
@@ -36,7 +36,7 @@ The initial Admin is created from the login screen's first-time setup flow. Setu
     +-- .env.example
     +-- DEPLOYMENT.md
 
-The API uses SQL Server and applies EF Core migrations automatically at startup. It includes a clean initial migration, starter pricing items, and the existing client list as seed data. Photos use persistent VPS storage while a quote is outstanding. On completion, local photos are purged after the external archive URL is saved; quote data and the archived photo count remain in SQL Server.
+The API uses SQL Server and applies EF Core migrations automatically at startup. It includes a clean initial migration, starter pricing items, and the existing client list as seed data. Photos use persistent VPS storage while a quote is outstanding. The tablet compresses supported large images before upload, quote views load small thumbnails lazily, and ZIP downloads stream without buffering the complete archive. On completion, verified local photos enter a 48-hour recovery window before purge; quote data and the archived photo count remain in SQL Server.
 
 ## Local development
 
@@ -53,7 +53,7 @@ Start the frontend:
     npm install
     npm run dev
 
-The web app opens at http://localhost:5173. Vite proxies API and upload requests to http://localhost:4000.
+The web app opens at http://localhost:5173. Vite proxies API requests to http://localhost:4000.
 
 Useful validation:
 

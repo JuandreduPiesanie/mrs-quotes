@@ -10,13 +10,13 @@ public sealed class AppointmentProvider(MrsQuotesDbContext context) : IAppointme
 {
     public async Task<List<AppointmentDto>> GetCalendarAsync(int userId, string role, int? assessorId)
     {
-        if (role is RoleNames.Admin or RoleNames.Management or RoleNames.QuoteAdministrator)
+        if (role is RoleNames.Management or RoleNames.QuoteAdministrator)
         {
             var quoteQuery = context.Quotes.AsNoTracking()
                 .Where(x => x.Status == "submitted");
             if (role == RoleNames.QuoteAdministrator)
             {
-                quoteQuery = quoteQuery.Where(x => x.Assessor.QuoteAdministratorId == userId);
+                quoteQuery = quoteQuery.Where(x => x.QuoteAdministratorId == userId);
             }
             if (assessorId.HasValue)
             {
@@ -37,9 +37,9 @@ public sealed class AppointmentProvider(MrsQuotesDbContext context) : IAppointme
                 Subtotal = x.Subtotal,
                 AssessorId = x.AssessorId,
                 AssessorName = x.Assessor.Name,
-                QuoteAdministratorId = x.Assessor.QuoteAdministratorId,
-                QuoteAdministratorName = x.Assessor.QuoteAdministrator != null
-                    ? x.Assessor.QuoteAdministrator.Name
+                QuoteAdministratorId = x.QuoteAdministratorId,
+                QuoteAdministratorName = x.QuoteAdministrator != null
+                    ? x.QuoteAdministrator.Name
                     : null,
                 CalendarType = "quote_task"
             }).ToListAsync();
