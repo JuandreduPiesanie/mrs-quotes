@@ -7,8 +7,10 @@ MRS Quotes schedules insurance-repair assessments and routes submitted quotes fr
 1. A Schedule Administrator creates an appointment for an assessor.
 2. The assessor completes the visit and submits the quote with line items and photos.
 3. The appointment leaves the assessor calendar and appears as an outstanding quote and calendar task for the assessor's assigned Quote Administrator.
-4. The Quote Administrator reviews or edits the quote and completes it with the ERP quote number.
-5. Management maintains assessor-to-Quote-Administrator assignments.
+4. The Quote Administrator downloads the photos and uploads them to the company's OneDrive or SharePoint quote folder.
+5. Completion requires both the ERP quote number and the OneDrive or SharePoint folder URL.
+6. The system retains the completed quote and archive URL, then purges that quote's local photo files from the VPS.
+7. Management maintains assessor-to-Quote-Administrator assignments.
 
 ## Roles
 
@@ -34,7 +36,7 @@ The initial Admin is created from the login screen's first-time setup flow. Setu
     +-- .env.example
     +-- DEPLOYMENT.md
 
-The API uses SQL Server and applies EF Core migrations automatically at startup. It includes a clean initial migration, starter pricing items, and the existing client list as seed data. Uploaded quote photos use persistent storage.
+The API uses SQL Server and applies EF Core migrations automatically at startup. It includes a clean initial migration, starter pricing items, and the existing client list as seed data. Photos use persistent VPS storage while a quote is outstanding. On completion, local photos are purged after the external archive URL is saved; quote data and the archived photo count remain in SQL Server.
 
 ## Local development
 

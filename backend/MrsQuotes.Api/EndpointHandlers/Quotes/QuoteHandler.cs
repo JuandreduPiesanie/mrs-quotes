@@ -12,9 +12,9 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public async Task<IResult> GetQuotes(int? assessorId, ClaimsPrincipal principal)
+    public async Task<IResult> GetQuotes(int? assessorId, string? status, ClaimsPrincipal principal)
     {
-        return Results.Ok(await provider.GetQuotesAsync(principal.UserId(), principal.UserRole(), assessorId));
+        return Results.Ok(await provider.GetQuotesAsync(principal.UserId(), principal.UserRole(), assessorId, status));
     }
 
     public async Task<IResult> GetQuote(int id, ClaimsPrincipal principal)
@@ -64,7 +64,8 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
             id,
             principal.UserId(),
             principal.UserRole(),
-            request.ErpQuoteNumber);
+            request.ErpQuoteNumber,
+            request.PhotoArchiveUrl);
         return completed
             ? Results.Ok(new { id, message = "Quote marked as complete." })
             : Results.NotFound(new { error = "Quote not found." });
@@ -83,6 +84,23 @@ public sealed class QuoteHandler(IQuoteProvider provider, IValidator<QuotePayloa
         return archive is null
             ? Results.NotFound(new { error = "Quote not found." })
             : Results.File(archive.Content, "application/zip", archive.FileName);
+    }
+
+    public async Task<IResult> GetPhoto(
+        int id,
+        int photoId,
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken)
+    {
+        var photo = await provider.GetPhotoAsync(
+            id,
+            photoId,
+            principal.UserId(),
+            principal.UserRole(),
+            cancellationToken);
+        return photo is null
+            ? Results.NotFound(new { error = "Photo not found." })
+            : Results.File(photo.Content, photo.ContentType);
     }
 
     private async Task<(QuotePayload? Payload, IReadOnlyList<PhotoUpload> Photos, IResult? Error)> ReadPayloadAsync(

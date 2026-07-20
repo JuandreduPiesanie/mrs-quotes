@@ -74,6 +74,7 @@ public sealed class MrsQuotesDbContext(DbContextOptions<MrsQuotesDbContext> opti
             entity.Property(x => x.Status).HasMaxLength(40);
             entity.Property(x => x.Subtotal).HasColumnType("decimal(18,2)");
             entity.Property(x => x.ErpQuoteNumber).HasMaxLength(150);
+            entity.Property(x => x.PhotoArchiveUrl).HasMaxLength(2048);
             entity.HasOne(x => x.Assessor).WithMany(x => x.Quotes)
                 .HasForeignKey(x => x.AssessorId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Appointment).WithOne(x => x.Quote)

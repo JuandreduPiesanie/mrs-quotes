@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using MrsQuotes.Api.Database;
 using MrsQuotes.Api.Startup;
 using MrsQuotes.Api.Startup.Authentication;
@@ -46,17 +45,6 @@ app.UseCors("Frontend");
 app.UseMiddleware<ApiExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
-
-var uploadsPath = configuration["Storage:UploadsPath"];
-uploadsPath = string.IsNullOrWhiteSpace(uploadsPath)
-    ? Path.Combine(app.Environment.ContentRootPath, "uploads")
-    : Path.GetFullPath(uploadsPath, app.Environment.ContentRootPath);
-Directory.CreateDirectory(uploadsPath);
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
-});
 
 app.MapEndpoints();
 app.Run();

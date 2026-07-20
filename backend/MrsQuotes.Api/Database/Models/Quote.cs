@@ -16,6 +16,9 @@ public sealed class Quote
     public string Status { get; set; } = "submitted";
     public decimal Subtotal { get; set; }
     public string? ErpQuoteNumber { get; set; }
+    public string? PhotoArchiveUrl { get; set; }
+    public int ArchivedPhotoCount { get; set; }
+    public DateTime? PhotosPurgedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<QuoteItem> Items { get; set; } = new();

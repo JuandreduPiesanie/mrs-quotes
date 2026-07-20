@@ -17,6 +17,7 @@ public sealed class QuoteItemInput
 public sealed class CompleteQuoteRequest
 {
     public string ErpQuoteNumber { get; set; } = "";
+    public string PhotoArchiveUrl { get; set; } = "";
 }
 
 public sealed class QuoteCreatedDto
@@ -53,6 +54,12 @@ public sealed class QuoteDto
     public decimal Subtotal { get; set; }
     [JsonPropertyName("erp_quote_number")]
     public string? ErpQuoteNumber { get; set; }
+    [JsonPropertyName("photo_archive_url")]
+    public string? PhotoArchiveUrl { get; set; }
+    [JsonPropertyName("archived_photo_count")]
+    public int ArchivedPhotoCount { get; set; }
+    [JsonPropertyName("photos_purged_at")]
+    public DateTime? PhotosPurgedAt { get; set; }
     [JsonPropertyName("completed_at")]
     public DateTime? CompletedAt { get; set; }
     [JsonPropertyName("created_at")]

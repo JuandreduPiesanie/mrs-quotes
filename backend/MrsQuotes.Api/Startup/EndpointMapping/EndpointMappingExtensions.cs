@@ -62,11 +62,15 @@ public static class EndpointMappingExtensions
             .RequireAuthorization(PolicyNames.Schedule)
             .WithValidation<CreateAppointmentRequest>();
 
-        app.MapGet("/api/quotes", (QuoteHandler handler, int? assessorId, ClaimsPrincipal principal) =>
-                handler.GetQuotes(assessorId, principal))
+        app.MapGet("/api/quotes", (QuoteHandler handler, int? assessorId, string? status, ClaimsPrincipal principal) =>
+                handler.GetQuotes(assessorId, status, principal))
             .RequireAuthorization(PolicyNames.QuoteDirectory);
         app.MapGet("/api/quotes/{id:int}", (QuoteHandler handler, int id, ClaimsPrincipal principal) =>
                 handler.GetQuote(id, principal))
+            .RequireAuthorization(PolicyNames.QuoteDirectory);
+        app.MapGet("/api/quotes/{id:int}/photos/{photoId:int}",
+                (QuoteHandler handler, int id, int photoId, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
+                    handler.GetPhoto(id, photoId, principal, cancellationToken))
             .RequireAuthorization(PolicyNames.QuoteDirectory);
         app.MapGet("/api/quotes/{id:int}/photos.zip",
                 (QuoteHandler handler, int id, ClaimsPrincipal principal, CancellationToken cancellationToken) =>

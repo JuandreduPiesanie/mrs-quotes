@@ -962,7 +962,7 @@ textarea { min-height: 92px; resize: vertical; }
 
 .erp-complete-panel {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(200px, 0.7fr) minmax(300px, 1.3fr) auto;
   gap: 12px;
   align-items: end;
   padding: 14px;
@@ -976,8 +976,42 @@ textarea { min-height: 92px; resize: vertical; }
   margin: 0;
 }
 
+.photo-archive-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  margin: 14px 0;
+  border: 1px solid #d7e5dd;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+
+.photo-archive-panel div {
+  display: grid;
+  gap: 4px;
+}
+
+.photo-archive-panel span {
+  color: #60706a;
+}
+
+.archive-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
   .erp-complete-panel {
     grid-template-columns: 1fr;
+  }
+
+  .photo-archive-panel {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

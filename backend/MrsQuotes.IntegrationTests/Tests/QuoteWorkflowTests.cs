@@ -82,7 +82,11 @@ public sealed class QuoteWorkflowTests
 
         var complete = await _client.PatchAsJsonAsync(
             $"/api/quotes/{quotes[0].Id}/complete",
-            new CompleteQuoteRequest { ErpQuoteNumber = "ERP-1001" });
+            new CompleteQuoteRequest
+            {
+                ErpQuoteNumber = "ERP-1001",
+                PhotoArchiveUrl = "https://mrsquotes.sharepoint.com/sites/quotes/MRS-Q-000001"
+            });
         complete.EnsureSuccessStatusCode();
 
         var outstanding = await _client.GetFromJsonAsync<List<QuoteDto>>("/api/quotes");

@@ -22,5 +22,23 @@ public sealed class CompleteQuoteRequestValidator : AbstractValidator<CompleteQu
     public CompleteQuoteRequestValidator()
     {
         RuleFor(x => x.ErpQuoteNumber).NotEmpty().MaximumLength(150);
+        RuleFor(x => x.PhotoArchiveUrl)
+            .NotEmpty()
+            .MaximumLength(2048)
+            .Must(BeSupportedArchiveUrl)
+            .WithMessage("Enter a valid HTTPS OneDrive or SharePoint folder URL.");
+    }
+
+    private static bool BeSupportedArchiveUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        var host = uri.Host.ToLowerInvariant();
+        return host == "1drv.ms"
+            || host == "onedrive.live.com"
+            || host.EndsWith(".sharepoint.com", StringComparison.Ordinal);
     }
 }

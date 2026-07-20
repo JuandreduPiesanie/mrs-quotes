@@ -156,6 +156,16 @@ function createApi(token) {
     link.remove();
     URL.revokeObjectURL(url);
   }
+  async function loadPhoto(path) {
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API}${path}`, { headers });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(getErrorMessage(data, 'Photo could not be loaded.'));
+    }
+    return URL.createObjectURL(await res.blob());
+  }
   return {
     login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     setupFirstAdmin: (name, email, password) => request('/auth/setup', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
@@ -172,12 +182,20 @@ function createApi(token) {
     }),
     clients: (search = '') => request(`/clients${search ? `?search=${encodeURIComponent(search)}` : ''}`),
     createAppointment: (body) => request('/appointments', { method: 'POST', body: JSON.stringify(body) }),
-    quotes: (assessorId) => request(`/quotes${assessorId && assessorId !== 'all' ? `?assessorId=${assessorId}` : ''}`),
+    quotes: (assessorId, status = 'submitted') => {
+      const params = new URLSearchParams({ status });
+      if (assessorId && assessorId !== 'all') params.set('assessorId', assessorId);
+      return request(`/quotes?${params.toString()}`);
+    },
     quote: (id) => request(`/quotes/${id}`),
+    loadPhoto,
     downloadQuotePhotos: (id, quoteNumber) => download(`/quotes/${id}/photos.zip`, `${quoteNumber || `Quote-${id}`}-photos.zip`),
     submitQuote: (form) => request('/quotes', { method: 'POST', body: form }),
     updateQuote: (id, form) => request(`/quotes/${id}`, { method: 'PUT', body: form }),
-    completeQuote: (id, erpQuoteNumber) => request(`/quotes/${id}/complete`, { method: 'PATCH', body: JSON.stringify({ erpQuoteNumber }) }),
+    completeQuote: (id, erpQuoteNumber, photoArchiveUrl) => request(`/quotes/${id}/complete`, {
+      method: 'PATCH',
+      body: JSON.stringify({ erpQuoteNumber, photoArchiveUrl })
+    }),
   };
 }
 
@@ -733,6 +751,10 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
   const [photoIndex, setPhotoIndex] = useState(null);
   const [downloadMessage, setDownloadMessage] = useState('');
   const [erpQuoteNumber, setErpQuoteNumber] = useState('');
+  const [photoArchiveUrl, setPhotoArchiveUrl] = useState('');
+  const [quoteStatus, setQuoteStatus] = useState('submitted');
+  const [photoUrls, setPhotoUrls] = useState({});
+  const [photoLoadError, setPhotoLoadError] = useState('');
 
   const isAdmin = role === ROLES.ADMIN;
   const isAssessor = role === ROLES.ASSESSOR;
@@ -746,18 +768,51 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
   }, [api, canReviewQuotes]);
 
   useEffect(() => {
-    api.quotes(assessorId).then((rows) => {
+    api.quotes(assessorId, quoteStatus).then((rows) => {
       setQuotes(rows);
       if (active && !rows.some((quote) => quote.id === active.id)) setActive(null);
     });
-  }, [api, assessorId]);
+  }, [api, assessorId, quoteStatus]);
 
   useEffect(() => {
     if (!initialQuoteId) return;
     openQuote(initialQuoteId).then(() => onOpenedInitialQuote?.());
   }, [initialQuoteId]);
 
-  const filtered = quotes.filter((q) => `${q.quote_number} ${q.customer_name} ${q.site_address} ${q.assessor_name} ${q.quote_administrator_name || ''}`.toLowerCase().includes(query.toLowerCase()));
+  useEffect(() => {
+    let disposed = false;
+    const createdUrls = [];
+    setPhotoUrls({});
+    setPhotoLoadError('');
+
+    if (!active?.photos?.length) return undefined;
+
+    Promise.allSettled(active.photos.map(async (photo) => {
+      const url = await api.loadPhoto(photo.url);
+      createdUrls.push(url);
+      return [photo.id, url];
+    })).then((results) => {
+      if (disposed) {
+        createdUrls.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+
+      const loaded = results
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => result.value);
+      setPhotoUrls(Object.fromEntries(loaded));
+      if (loaded.length !== active.photos.length) {
+        setPhotoLoadError('One or more photos could not be loaded.');
+      }
+    });
+
+    return () => {
+      disposed = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [api, active]);
+
+  const filtered = quotes.filter((q) => `${q.quote_number} ${q.customer_name} ${q.site_address} ${q.assessor_name} ${q.quote_administrator_name || ''} ${q.erp_quote_number || ''}`.toLowerCase().includes(query.toLowerCase()));
 
   const adminRows = filtered.map((quote) => ({
     ...quote,
@@ -774,16 +829,18 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     ...(isManagement ? [{ field: 'quote_administrator_name', headerName: 'Quote Admin', minWidth: 180, flex: 1 }] : []),
     { field: 'submitted_label', headerName: 'Submitted', minWidth: 150, flex: 0.8 },
     { field: 'photo_count', headerName: 'Photos', minWidth: 95, flex: 0.45, type: 'number' },
+    { field: 'status', headerName: 'Status', minWidth: 110, flex: 0.55 },
     { field: 'subtotal_label', headerName: 'Reference Value', minWidth: 145, flex: 0.7 }
   ];
 
   async function refreshQuote(id = active?.id) {
-    const rows = await api.quotes(assessorId);
+    const rows = await api.quotes(assessorId, quoteStatus);
     setQuotes(rows);
     if (id && rows.some((quote) => quote.id === id)) {
       const next = await api.quote(id);
       setActive(next);
       setErpQuoteNumber(next.erp_quote_number || '');
+      setPhotoArchiveUrl(next.photo_archive_url || '');
     } else {
       setActive(null);
     }
@@ -803,9 +860,11 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     if (!active) return;
     setDownloadMessage('');
     try {
-      await api.completeQuote(active.id, erpQuoteNumber);
-      setActive(null);
-      await refreshQuote(null);
+      await api.completeQuote(active.id, erpQuoteNumber, photoArchiveUrl);
+      const completed = await api.quote(active.id);
+      setQuoteStatus('completed');
+      setActive(completed);
+      setQuotes((current) => current.filter((quote) => quote.id !== active.id));
     } catch (err) {
       setDownloadMessage(err.message);
     }
@@ -818,6 +877,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     const quote = await api.quote(id);
     setActive(quote);
     setErpQuoteNumber(quote.erp_quote_number || '');
+    setPhotoArchiveUrl(quote.photo_archive_url || '');
   }
 
   function closeQuote() {
@@ -826,6 +886,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     setPhotoIndex(null);
     setDownloadMessage('');
     setErpQuoteNumber('');
+    setPhotoArchiveUrl('');
   }
 
   function renderQuoteDetail({ fullScreen = false } = {}) {
@@ -845,10 +906,12 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
                 <p className="muted">{active.site_address}</p>
                 <p className="muted">Assessor: {active.assessor_name}</p>
                 {active.quote_administrator_name && <p className="muted">Quote admin: {active.quote_administrator_name}</p>}
+                <p className="muted">Status: {active.status === 'completed' ? 'Completed' : 'Outstanding'}</p>
+                {active.erp_quote_number && <p className="muted">ERP quote: {active.erp_quote_number}</p>}
               </div>
               <div className="detail-actions">
-                {isQuoteAdministrator && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
-                {canEditQuote && <button className="secondary" onClick={() => setEditing(true)}>Edit quote</button>}
+                {isQuoteAdministrator && active.status === 'submitted' && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
+                {canEditQuote && active.status === 'submitted' && <button className="secondary" onClick={() => setEditing(true)}>Edit quote</button>}
               </div>
             </div>
             <div className="line-table">
@@ -857,23 +920,50 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
               ))}
             </div>
             {canReviewQuotes && <h3>Reference total: R {active.subtotal.toFixed(2)}</h3>}
-            {isQuoteAdministrator && (
+            {isQuoteAdministrator && active.status === 'submitted' && (
               <div className="erp-complete-panel">
                 <label>ERP Quote Number<input required value={erpQuoteNumber} onChange={(e) => setErpQuoteNumber(e.target.value)} placeholder="Enter ERP quote number" /></label>
-                <button className="primary" type="button" onClick={completeActiveQuote}><Check size={18} />Mark as complete</button>
+                <label>OneDrive Photo Folder URL<input required type="url" value={photoArchiveUrl} onChange={(e) => setPhotoArchiveUrl(e.target.value)} placeholder="Paste the OneDrive or SharePoint folder link" /></label>
+                <button
+                  className="primary"
+                  type="button"
+                  disabled={!erpQuoteNumber.trim() || !photoArchiveUrl.trim()}
+                  onClick={completeActiveQuote}
+                >
+                  <Check size={18} />Mark as complete
+                </button>
+              </div>
+            )}
+            {active.status === 'completed' && (
+              <div className="photo-archive-panel">
+                <div>
+                  <strong>Archived quote photos</strong>
+                  <span>
+                    {active.photos_purged_at
+                      ? `${active.archived_photo_count || 0} photo(s) were removed from the VPS after completion.`
+                      : 'The archive link is saved and local photo cleanup is pending.'}
+                  </span>
+                </div>
+                {active.photo_archive_url
+                  ? <a className="primary archive-link" href={active.photo_archive_url} target="_blank" rel="noopener noreferrer">Open photos in OneDrive</a>
+                  : <span className="error">No OneDrive archive link was recorded.</span>}
               </div>
             )}
             {downloadMessage && <div className="error">{downloadMessage}</div>}
+            {photoLoadError && <div className="error">{photoLoadError}</div>}
             <div className="photo-grid">
               {active.photos.map((photo, index) => (
-                <button type="button" key={photo.id} onClick={() => setPhotoIndex(index)}>
-                  <img src={`${API.replace('/api', '')}${photo.url}`} alt={photo.original_name} />
+                <button type="button" key={photo.id} disabled={!photoUrls[photo.id]} onClick={() => setPhotoIndex(index)}>
+                  {photoUrls[photo.id]
+                    ? <img src={photoUrls[photo.id]} alt={photo.original_name} />
+                    : <span>Loading photo...</span>}
                 </button>
               ))}
             </div>
             {photoIndex !== null && active.photos[photoIndex] && (
               <PhotoViewer
                 photos={active.photos}
+                photoUrls={photoUrls}
                 index={photoIndex}
                 onChange={setPhotoIndex}
                 onClose={() => setPhotoIndex(null)}
@@ -894,14 +984,23 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     );
   }
 
-  const title = isAssessor ? 'My Quotes' : isManagement ? 'Outstanding Quote Work' : 'My Outstanding Quotes';
-  const subtitle = isAssessor ? 'Track and edit submitted quotes until the quote administrator completes them.' : 'Open a submitted quote to review the full packet.';
+  const showingCompleted = quoteStatus === 'completed';
+  const title = showingCompleted
+    ? 'Completed Quotes'
+    : isAssessor ? 'My Quotes' : isManagement ? 'Outstanding Quote Work' : 'My Outstanding Quotes';
+  const subtitle = showingCompleted
+    ? 'Open a completed quote to view its ERP number and OneDrive photo archive.'
+    : isAssessor ? 'Track and edit submitted quotes until the quote administrator completes them.' : 'Open a submitted quote to review the full packet.';
 
   return (
     <section className="workspace">
       <PageTitle title={title} subtitle={subtitle} />
 
       <div className="quote-tools">
+        <select className="filter-select" value={quoteStatus} onChange={(e) => { setQuoteStatus(e.target.value); setActive(null); }}>
+          <option value="submitted">Outstanding quotes</option>
+          <option value="completed">Completed quotes</option>
+        </select>
         {canReviewQuotes && (
           <select className="filter-select" value={assessorId} onChange={(e) => setAssessorId(e.target.value)}>
             <option value="all">All assessors</option>
@@ -947,9 +1046,8 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     </section>
   );
 }
-function PhotoViewer({ photos, index, onChange, onClose }) {
+function PhotoViewer({ photos, photoUrls, index, onChange, onClose }) {
   const photo = photos[index];
-  const baseUrl = API.replace('/api', '');
   const canGoBack = index > 0;
   const canGoForward = index < photos.length - 1;
 
@@ -973,7 +1071,7 @@ function PhotoViewer({ photos, index, onChange, onClose }) {
             <ChevronLeftIcon fontSize="large" />
           </IconButton>
           <Box className="photo-slider-image-wrap">
-            <img src={`${baseUrl}${photo.url}`} alt={photo.original_name} />
+            <img src={photoUrls[photo.id]} alt={photo.original_name} />
           </Box>
           <IconButton className="photo-slider-arrow" onClick={next} disabled={!canGoForward} aria-label="Next photo">
             <ChevronRightIcon fontSize="large" />
@@ -982,7 +1080,7 @@ function PhotoViewer({ photos, index, onChange, onClose }) {
         <Box className="photo-slider-strip">
           {photos.map((item, itemIndex) => (
             <button type="button" className={itemIndex === index ? 'active' : ''} key={item.id} onClick={() => onChange(itemIndex)}>
-              <img src={`${baseUrl}${item.url}`} alt={item.original_name} />
+              <img src={photoUrls[item.id]} alt={item.original_name} />
             </button>
           ))}
         </Box>

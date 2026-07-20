@@ -31,6 +31,7 @@ public static class DependencyInjectionSetup
         {
             services.AddDbContext<MrsQuotesDbContext>(options =>
                 options.UseSqlServer(configuration.GetConnectionString("Database")));
+            services.AddHostedService<CompletedQuotePhotoPurgeWorker>();
         }
 
         services.Configure<FormOptions>(options =>

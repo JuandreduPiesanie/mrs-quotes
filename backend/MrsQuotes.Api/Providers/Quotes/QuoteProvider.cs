@@ -8,11 +8,30 @@ using MrsQuotes.Models.Quotes;
 
 namespace MrsQuotes.Api.Providers.Quotes;
 
-public sealed class QuoteProvider(MrsQuotesDbContext context, IPhotoStorage photoStorage) : IQuoteProvider
+public sealed class QuoteProvider(
+    MrsQuotesDbContext context,
+    IPhotoStorage photoStorage,
+    ILogger<QuoteProvider> logger) : IQuoteProvider
 {
-    public async Task<List<QuoteDto>> GetQuotesAsync(int userId, string role, int? assessorId)
+    public async Task<List<QuoteDto>> GetQuotesAsync(
+        int userId,
+        string role,
+        int? assessorId,
+        string? status)
     {
-        var query = context.Quotes.AsNoTracking().Where(x => x.Status == "submitted");
+        var requestedStatus = string.IsNullOrWhiteSpace(status)
+            ? "submitted"
+            : status.Trim().ToLowerInvariant();
+        if (requestedStatus is not ("submitted" or "completed" or "all"))
+        {
+            throw new InvalidOperationException("Quote status must be submitted, completed, or all.");
+        }
+
+        var query = context.Quotes.AsNoTracking();
+        if (requestedStatus != "all")
+        {
+            query = query.Where(x => x.Status == requestedStatus);
+        }
         query = role switch
         {
             RoleNames.Assessor => query.Where(x => x.AssessorId == userId),
@@ -41,9 +60,12 @@ public sealed class QuoteProvider(MrsQuotesDbContext context, IPhotoStorage phot
             Status = x.Status,
             Subtotal = x.Subtotal,
             ErpQuoteNumber = x.ErpQuoteNumber,
+            PhotoArchiveUrl = x.PhotoArchiveUrl,
+            ArchivedPhotoCount = x.ArchivedPhotoCount,
+            PhotosPurgedAt = x.PhotosPurgedAt,
             CompletedAt = x.CompletedAt,
             CreatedAt = x.CreatedAt,
-            PhotoCount = x.Photos.Count
+            PhotoCount = x.Status == "completed" ? x.ArchivedPhotoCount : x.Photos.Count
         }).ToListAsync();
     }
 
@@ -139,6 +161,10 @@ public sealed class QuoteProvider(MrsQuotesDbContext context, IPhotoStorage phot
             .Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.Id == quoteId, cancellationToken);
         if (quote is null) return false;
+        if (quote.Status != "submitted")
+        {
+            throw new InvalidOperationException("Completed quotes cannot be edited.");
+        }
         if (role != RoleNames.Admin && quote.AssessorId != userId)
         {
             throw new UnauthorizedAccessException("You can only edit your own quotes.");
@@ -177,20 +203,59 @@ public sealed class QuoteProvider(MrsQuotesDbContext context, IPhotoStorage phot
         }
     }
 
-    public async Task<bool> CompleteAsync(int quoteId, int userId, string role, string erpQuoteNumber)
+    public async Task<bool> CompleteAsync(
+        int quoteId,
+        int userId,
+        string role,
+        string erpQuoteNumber,
+        string photoArchiveUrl)
     {
         var quote = await context.Quotes
             .Include(x => x.Assessor)
+            .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId);
         if (quote is null || !CanAccess(quote, userId, role)) return false;
         if (quote.Status != "submitted")
         {
             throw new InvalidOperationException("Only outstanding submitted quotes can be completed.");
         }
+        var completedAt = DateTime.UtcNow;
+        var photosToPurge = quote.Photos.ToList();
         quote.Status = "completed";
         quote.ErpQuoteNumber = erpQuoteNumber.Trim();
-        quote.CompletedAt = DateTime.UtcNow;
+        quote.PhotoArchiveUrl = photoArchiveUrl.Trim();
+        quote.ArchivedPhotoCount = photosToPurge.Count;
+        quote.CompletedAt = completedAt;
+        quote.PhotosPurgedAt = photosToPurge.Count == 0 ? completedAt : null;
         await context.SaveChangesAsync();
+
+        var deletedPhotos = new List<QuotePhoto>();
+        foreach (var photo in photosToPurge)
+        {
+            try
+            {
+                await photoStorage.DeleteAsync(photo.FileName);
+                deletedPhotos.Add(photo);
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    exception,
+                    "Unable to purge photo {PhotoId} for completed quote {QuoteId}.",
+                    photo.Id,
+                    quote.Id);
+            }
+        }
+
+        if (deletedPhotos.Count > 0)
+        {
+            context.QuotePhotos.RemoveRange(deletedPhotos);
+            if (deletedPhotos.Count == photosToPurge.Count)
+            {
+                quote.PhotosPurgedAt = DateTime.UtcNow;
+            }
+            await context.SaveChangesAsync();
+        }
         return true;
     }
 
@@ -225,6 +290,30 @@ public sealed class QuoteProvider(MrsQuotesDbContext context, IPhotoStorage phot
         }
         if (output.Length == 0) throw new InvalidOperationException("The photo files could not be found on disk.");
         return new QuoteArchive(output.ToArray(), $"{quote.QuoteNumber}-photos.zip");
+    }
+
+    public async Task<QuotePhotoFile?> GetPhotoAsync(
+        int quoteId,
+        int photoId,
+        int userId,
+        string role,
+        CancellationToken cancellationToken)
+    {
+        var quote = await context.Quotes.AsNoTracking()
+            .Include(x => x.Assessor)
+            .Include(x => x.Photos)
+            .FirstOrDefaultAsync(x => x.Id == quoteId, cancellationToken);
+        if (quote is null || quote.Status != "submitted" || !CanAccess(quote, userId, role)) return null;
+
+        var photo = quote.Photos.FirstOrDefault(x => x.Id == photoId);
+        if (photo is null) return null;
+
+        var path = photoStorage.GetPath(photo.FileName);
+        if (!File.Exists(path)) return null;
+
+        return new QuotePhotoFile(
+            await File.ReadAllBytesAsync(path, cancellationToken),
+            photo.MimeType);
     }
 
     private async Task<List<QuoteItem>> PriceItemsAsync(
@@ -290,9 +379,12 @@ public sealed class QuoteProvider(MrsQuotesDbContext context, IPhotoStorage phot
             Status = quote.Status,
             Subtotal = quote.Subtotal,
             ErpQuoteNumber = quote.ErpQuoteNumber,
+            PhotoArchiveUrl = quote.PhotoArchiveUrl,
+            ArchivedPhotoCount = quote.ArchivedPhotoCount,
+            PhotosPurgedAt = quote.PhotosPurgedAt,
             CompletedAt = quote.CompletedAt,
             CreatedAt = quote.CreatedAt,
-            PhotoCount = quote.Photos.Count,
+            PhotoCount = quote.Status == "completed" ? quote.ArchivedPhotoCount : quote.Photos.Count,
             Items = quote.Items.OrderBy(x => x.Id).Select(x => new QuoteItemDto
             {
                 Id = x.Id,
@@ -303,13 +395,15 @@ public sealed class QuoteProvider(MrsQuotesDbContext context, IPhotoStorage phot
                 UnitRate = x.UnitRate,
                 LineTotal = x.LineTotal
             }).ToList(),
-            Photos = quote.Photos.OrderBy(x => x.Id).Select(x => new QuotePhotoDto
+            Photos = quote.Status == "completed"
+                ? []
+                : quote.Photos.OrderBy(x => x.Id).Select(x => new QuotePhotoDto
             {
                 Id = x.Id,
                 OriginalName = x.OriginalName,
                 MimeType = x.MimeType,
                 CreatedAt = x.CreatedAt,
-                Url = $"/uploads/{Uri.EscapeDataString(x.FileName)}"
+                Url = $"/quotes/{quote.Id}/photos/{x.Id}"
             }).ToList()
         };
     }
