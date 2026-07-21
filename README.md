@@ -12,6 +12,26 @@ MRS Quotes schedules insurance-repair assessments and routes submitted quotes fr
 6. The Quote Administrator confirms every photo is present in the archive. The system retains the completed quote and archive URL, keeps local recovery copies for 48 hours, then purges them from the VPS.
 7. Management maintains assessor-to-Quote-Administrator assignments.
 
+## OUTsurance 2026 quote controls
+
+The field quote builder uses only the **OUTsurance Building Rates July 2026** schedule. The Schedule Administrator does not choose the scope: the assessor selects one or more trades at the site, then searches and adds line items within those trades.
+
+Current system-enforced controls:
+
+- Startup fees are hidden from the selectable catalogue and are added by the API. There is no startup-fee override or reason workflow.
+- A fee is added at most once for each applicable trade rule, even when several qualifying line items are selected.
+- General plumbing and once-off geyser fault work share one plumbing startup fee, so selecting both does not duplicate it.
+- Ceilings and painting share one combined startup fee.
+- General building startup applies only to qualifying building work; excavation, compaction, and concrete-only selections do not trigger it.
+- Tiling, built-in cupboards, and metal/steel each use their own automatic startup fee.
+- Trades without a 2026 startup rule do not receive one. This includes leak detection, roofing/waterproofing, thatching, carpentry, electrical/security, air-conditioning, boreholes, and swimming pools.
+- Fixed rates are server-priced. Cost, cost-plus, and calculated items require the assessor to enter the applicable excl. VAT base amount; configured markup is applied by the API.
+- PDF page numbers and the source workbook's VAT/example calculation rows are not stored as quote catalogue data.
+
+Minimum-fee rules are not automatically applied in this first implementation. Until that rule engine is added, the Quote Administrator must still check the 2026 Section E, built-in-cupboard, and precast-walling minimums before capturing the final ERP quote.
+
+The normalized catalogue is stored in `backend/MrsQuotes.Api/SeedData/outsurance-rates-2026.json`. When a new schedule is received, it should be imported as a new version and reviewed before activation; the 2026 data should not be edited into 2027 rates in place.
+
 ## Roles
 
 - Admin: unrestricted system access, including completing the assessor quote workflow on behalf of the assessor assigned to an appointment, user registration, roles, and assignments.

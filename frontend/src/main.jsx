@@ -6,11 +6,7 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
   Typography
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -158,8 +154,8 @@ function createApi(token) {
   return {
     login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     setupFirstAdmin: (name, email, password) => request('/auth/setup', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
-    sections: () => request('/price-sections'),
-    prices: (group) => request(`/price-items${group ? `?group=${encodeURIComponent(group)}` : ''}`),
+    trades: () => request('/price-trades'),
+    prices: (trade) => request(`/price-items${trade ? `?trade=${encodeURIComponent(trade)}` : ''}`),
     appointments: (assessorId) => request(`/appointments${assessorId ? `?assessorId=${assessorId}` : ''}`),
     assessors: () => request('/users/assessors'),
     quoteAdministrators: () => request('/users/quote-administrators'),
@@ -231,17 +227,143 @@ function Login({ onLogin }) {
 function NavButton({ icon, label, active, onClick }) {
   return <button className={active ? 'nav active' : 'nav'} onClick={onClick}>{React.cloneElement(icon, { size: 19 })}<span>{label}</span></button>;
 }
-function QuoteBuilder({ api, appointment, quoteId, onDone }) {
-  const [sections, setSections] = useState([]);
-  const [section, setSection] = useState('');
+
+function TradeItemPicker({ api, onAdd, onTradeRemoved, initialTradeCodes = [] }) {
+  const [trades, setTrades] = useState([]);
+  const [selectedTradeCodes, setSelectedTradeCodes] = useState([]);
+  const [activeTrade, setActiveTrade] = useState('');
   const [items, setItems] = useState([]);
+  const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
+  const initialTradeKey = [...new Set(initialTradeCodes.filter(Boolean))].sort().join('|');
+
+  useEffect(() => {
+    api.trades().then(setTrades).catch((err) => setError(err.message));
+  }, [api]);
+
+  useEffect(() => {
+    if (!initialTradeKey) return;
+    const codes = initialTradeKey.split('|');
+    setSelectedTradeCodes(codes);
+    setActiveTrade((current) => current || codes[0]);
+  }, [initialTradeKey]);
+
+  useEffect(() => {
+    setSearch('');
+    if (!activeTrade) {
+      setItems([]);
+      return;
+    }
+    api.prices(activeTrade).then(setItems).catch((err) => setError(err.message));
+  }, [api, activeTrade]);
+
+  const tradeGroups = useMemo(() => trades.reduce((groups, trade) => {
+    const group = groups.find((entry) => entry.name === trade.group);
+    if (group) group.trades.push(trade);
+    else groups.push({ name: trade.group, trades: [trade] });
+    return groups;
+  }, []), [trades]);
+
+  const visibleItems = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return items.filter((item) => !term
+      || item.description.toLowerCase().includes(term)
+      || item.category.toLowerCase().includes(term));
+  }, [items, search]);
+
+  const categoryGroups = useMemo(() => visibleItems.reduce((groups, item) => {
+    const group = groups.find((entry) => entry.name === item.category);
+    if (group) group.items.push(item);
+    else groups.push({ name: item.category, items: [item] });
+    return groups;
+  }, []), [visibleItems]);
+
+  function toggleTrade(code) {
+    setSelectedTradeCodes((current) => {
+      if (current.includes(code)) {
+        const tradeName = trades.find((item) => item.code === code)?.name || 'this trade';
+        if (!window.confirm(`Remove ${tradeName} from the quote? Its selected line items will also be removed.`)) return current;
+        const next = current.filter((item) => item !== code);
+        onTradeRemoved(code);
+        if (activeTrade === code) setActiveTrade(next[0] || '');
+        return next;
+      }
+      setActiveTrade(code);
+      return [...current, code];
+    });
+  }
+
+  return (
+    <div className="trade-item-picker">
+      <div className="quote-step-heading">
+        <div><span>Step 1</span><h3>Select the trades for this quote</h3></div>
+        <small>OUTsurance 2026 rate schedule</small>
+      </div>
+      <p className="field-help">The assessor selects every relevant trade. Only line items for those trades become available.</p>
+      <div className="trade-groups">
+        {tradeGroups.map((group) => (
+          <div className="trade-group" key={group.name}>
+            <strong>{group.name}</strong>
+            <div className="trade-options">
+              {group.trades.map((trade) => {
+                const isSelected = selectedTradeCodes.includes(trade.code);
+                return (
+                  <button type="button" key={trade.code} className={isSelected ? 'trade-option selected' : 'trade-option'} onClick={() => toggleTrade(trade.code)} aria-pressed={isSelected}>
+                    <span>{isSelected && <Check size={15} />}{trade.name}</span>
+                    <small>{trade.item_count} items</small>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {selectedTradeCodes.length > 0 && (
+        <>
+          <div className="quote-step-heading line-item-heading">
+            <div><span>Step 2</span><h3>Add line items</h3></div>
+          </div>
+          <div className="trade-browse-tabs">
+            {selectedTradeCodes.map((code) => {
+              const trade = trades.find((item) => item.code === code);
+              if (!trade) return null;
+              return <button type="button" key={code} className={activeTrade === code ? 'active' : ''} onClick={() => setActiveTrade(code)}>{trade.name}</button>;
+            })}
+          </div>
+          <label className="catalog-search">
+            <Search size={18} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search this trade's line items" />
+          </label>
+          <div className="automatic-fee-note">Applicable startup fees are added automatically once per trade. They cannot be selected, duplicated, removed, or overridden.</div>
+          <div className="item-list grouped-item-list">
+            {categoryGroups.map((group) => (
+              <div className="catalog-category" key={group.name}>
+                <h4>{group.name}</h4>
+                {group.items.map((item) => (
+                  <button type="button" key={item.id} className="item-row" onClick={() => onAdd(item)}>
+                    <span>{item.description}{item.pricing_note && <em className="pricing-note">{item.pricing_note}</em>}{item.automatic_startup_fee && <em>Startup fee applies automatically</em>}</span>
+                    <small>{item.unit}</small>
+                    <Plus size={17} />
+                  </button>
+                ))}
+              </div>
+            ))}
+            {categoryGroups.length === 0 && <div className="empty">No matching line items.</div>}
+          </div>
+        </>
+      )}
+      {selectedTradeCodes.length === 0 && <div className="empty trade-empty">Select one or more trades to start adding line items.</div>}
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
+}
+
+function QuoteBuilder({ api, appointment, quoteId, onDone }) {
   const [selected, setSelected] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [message, setMessage] = useState('');
   const [existingQuote, setExistingQuote] = useState(null);
-
-  useEffect(() => { api.sections().then((data) => { setSections(data); setSection(data[0]?.section || ''); }); }, [api]);
-  useEffect(() => { if (section) api.prices(section).then(setItems); }, [api, section]);
 
   useEffect(() => {
     if (!quoteId) {
@@ -251,18 +373,35 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
     }
     api.quote(quoteId).then((quote) => {
       setExistingQuote(quote);
-      setSelected(quote.items.map((item) => ({
+      setSelected(quote.items.filter((item) => !item.system_generated).map((item) => ({
         priceItemId: item.price_item_id,
+        tradeCode: item.trade_code,
+        tradeName: item.trade_name,
+        category: item.category,
         description: item.description,
         unit: item.unit,
-        quantity: item.quantity
+        quantity: item.quantity,
+        enteredRate: item.input_amount ?? '',
+        requiresRateInput: item.input_amount !== null
       })));
     });
   }, [api, quoteId]);
   function addItem(item) {
     setSelected((current) => current.some((line) => line.priceItemId === item.id)
       ? current
-      : [...current, { priceItemId: item.id, description: item.description, unit: item.unit, quantity: 1 }]);
+      : [...current, {
+        priceItemId: item.id,
+        tradeCode: item.trade_code,
+        tradeName: item.trade_name,
+        category: item.category,
+        description: item.description,
+        unit: item.unit,
+        quantity: 1,
+        enteredRate: '',
+        requiresRateInput: item.requires_rate_input,
+        pricingMode: item.pricing_mode,
+        markupPercentage: item.markup_percentage
+      }]);
   }
 
   function updateQty(id, quantity) {
@@ -275,6 +414,12 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
     setSelected((current) => current.filter((item) => item.priceItemId !== id));
   }
 
+  function updateEnteredRate(id, enteredRate) {
+    setSelected((current) => current.map((item) => item.priceItemId === id
+      ? { ...item, enteredRate: enteredRate === '' ? '' : Number(enteredRate) }
+      : item));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setMessage('');
@@ -284,7 +429,11 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
       const body = new FormData();
       body.append('payload', JSON.stringify({
         appointmentId: appointment?.id,
-        items: selected.map((item) => ({ ...item, quantity: Number(item.quantity) }))
+        items: selected.map((item) => ({
+          priceItemId: item.priceItemId,
+          quantity: Number(item.quantity),
+          enteredRate: item.requiresRateInput ? Number(item.enteredRate) : null
+        }))
       }));
       preparedPhotos.forEach((file) => body.append('photos', file));
       if (existingQuote) await api.updateQuote(existingQuote.id, body);
@@ -316,22 +465,12 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
             <div><span>Request</span><strong>{appointment.request_details}</strong></div>
           </div>
 
-          <FormControl fullWidth className="quote-category-field" size="small">
-            <InputLabel id="quote-category-label">Quote category</InputLabel>
-            <Select labelId="quote-category-label" label="Quote category" value={section} onChange={(e) => setSection(e.target.value)}>
-              {sections.map((s) => <MenuItem key={s.section} value={s.section}>{s.section} ({s.item_count})</MenuItem>)}
-            </Select>
-          </FormControl>
-
-          <div className="item-list">
-            {items.map((item) => (
-              <button type="button" key={item.id} className="item-row" onClick={() => addItem(item)}>
-                <span>{item.description}</span>
-                <small>{item.unit}</small>
-                <Plus size={17} />
-              </button>
-            ))}
-          </div>
+          <TradeItemPicker
+            api={api}
+            onAdd={addItem}
+            onTradeRemoved={(code) => setSelected((current) => current.filter((item) => item.tradeCode !== code))}
+            initialTradeCodes={existingQuote?.items.filter((item) => !item.system_generated).map((item) => item.trade_code) || []}
+          />
         </div>
 
         <div className="panel quote-summary">
@@ -339,8 +478,15 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
           {selected.length === 0 && <div className="empty">No line items selected yet.</div>}
           {selected.map((item) => (
             <div className="selected-line" key={item.priceItemId}>
-              <div><strong>{item.description}</strong><span>{item.unit}</span></div>
-              <input type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => updateQty(item.priceItemId, e.target.value)} />
+              <div><strong>{item.description}</strong><span>{item.tradeName} · {item.unit}</span></div>
+              <div className="selected-line-inputs">
+                <label>Qty<input required type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => updateQty(item.priceItemId, e.target.value)} /></label>
+                {item.requiresRateInput && (
+                  <label>{item.pricingMode === 'manual' ? 'Calculated rate excl. VAT' : `Supplier cost excl. VAT${item.markupPercentage ? ` (+${item.markupPercentage}%)` : ''}`}
+                    <input required type="number" min="0" step="0.01" value={item.enteredRate} onChange={(e) => updateEnteredRate(item.priceItemId, e.target.value)} />
+                  </label>
+                )}
+              </div>
               <button type="button" className="secondary" onClick={() => removeItem(item.priceItemId)}>Remove</button>
             </div>
           ))}
@@ -1009,7 +1155,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
             </div>
             <div className="line-table">
               {active.items.map((item) => (
-                <div key={item.id}><span>{item.description}</span><span>{item.quantity} {item.unit}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+                <div key={item.id}><span>{item.description}{item.system_generated && <em className="system-fee-badge">Automatic 2026 fee</em>}</span><span>{item.quantity} {item.unit}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
               ))}
             </div>
             {canReviewQuotes && <h3>Reference total: R {active.subtotal.toFixed(2)}</h3>}
@@ -1235,25 +1381,36 @@ function PhotoViewer({ photos, api, index, onChange, onClose }) {
 }
 
 function QuoteEditor({ api, quote, onCancel, onSaved }) {
-  const [sections, setSections] = useState([]);
-  const [section, setSection] = useState('');
-  const [items, setItems] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [message, setMessage] = useState('');
-  const [selected, setSelected] = useState(() => quote.items.map((item) => ({
+  const [selected, setSelected] = useState(() => quote.items.filter((item) => !item.system_generated).map((item) => ({
     priceItemId: item.price_item_id,
+    tradeCode: item.trade_code,
+    tradeName: item.trade_name,
+    category: item.category,
     description: item.description,
     unit: item.unit,
-    quantity: item.quantity
+    quantity: item.quantity,
+    enteredRate: item.input_amount ?? '',
+    requiresRateInput: item.input_amount !== null
   })));
-
-  useEffect(() => { api.sections().then((data) => { setSections(data); setSection(data[0]?.section || ''); }); }, [api]);
-  useEffect(() => { if (section) api.prices(section).then(setItems); }, [api, section]);
 
   function addItem(item) {
     setSelected((current) => current.some((line) => line.priceItemId === item.id)
       ? current
-      : [...current, { priceItemId: item.id, description: item.description, unit: item.unit, quantity: 1 }]);
+      : [...current, {
+        priceItemId: item.id,
+        tradeCode: item.trade_code,
+        tradeName: item.trade_name,
+        category: item.category,
+        description: item.description,
+        unit: item.unit,
+        quantity: 1,
+        enteredRate: '',
+        requiresRateInput: item.requires_rate_input,
+        pricingMode: item.pricing_mode,
+        markupPercentage: item.markup_percentage
+      }]);
   }
 
   function updateQty(id, quantity) {
@@ -1266,6 +1423,12 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
     setSelected((current) => current.filter((item) => item.priceItemId !== id));
   }
 
+  function updateEnteredRate(id, enteredRate) {
+    setSelected((current) => current.map((item) => item.priceItemId === id
+      ? { ...item, enteredRate: enteredRate === '' ? '' : Number(enteredRate) }
+      : item));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setMessage('');
@@ -1275,7 +1438,11 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
       const body = new FormData();
       body.append('payload', JSON.stringify({
         appointmentId: quote.appointment_id,
-        items: selected.map((item) => ({ ...item, quantity: Number(item.quantity) }))
+        items: selected.map((item) => ({
+          priceItemId: item.priceItemId,
+          quantity: Number(item.quantity),
+          enteredRate: item.requiresRateInput ? Number(item.enteredRate) : null
+        }))
       }));
       preparedPhotos.forEach((file) => body.append('photos', file));
       await api.updateQuote(quote.id, body);
@@ -1297,27 +1464,23 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
         <div><span>Request</span><strong>{quote.request_details || 'No request notes captured'}</strong></div>
       </div>
 
-      <FormControl fullWidth className="quote-category-field" size="small">
-        <InputLabel id="edit-quote-category-label">Quote category</InputLabel>
-        <Select labelId="edit-quote-category-label" label="Quote category" value={section} onChange={(e) => setSection(e.target.value)}>
-          {sections.map((s) => <MenuItem key={s.section} value={s.section}>{s.section} ({s.item_count})</MenuItem>)}
-        </Select>
-      </FormControl>
-      <div className="item-list compact-list">
-        {items.map((item) => (
-          <button type="button" key={item.id} className="item-row" onClick={() => addItem(item)}>
-            <span>{item.description}</span>
-            <small>{item.unit}</small>
-            <Plus size={17} />
-          </button>
-        ))}
-      </div>
+      <TradeItemPicker
+        api={api}
+        onAdd={addItem}
+        onTradeRemoved={(code) => setSelected((current) => current.filter((item) => item.tradeCode !== code))}
+        initialTradeCodes={quote.items.filter((item) => !item.system_generated).map((item) => item.trade_code)}
+      />
 
       <h3>Selected Items</h3>
       {selected.map((item) => (
         <div className="selected-line" key={item.priceItemId}>
-          <div><strong>{item.description}</strong><span>{item.unit}</span></div>
-          <input type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => updateQty(item.priceItemId, e.target.value)} />
+          <div><strong>{item.description}</strong><span>{item.tradeName} · {item.unit}</span></div>
+          <div className="selected-line-inputs">
+            <label>Qty<input required type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => updateQty(item.priceItemId, e.target.value)} /></label>
+            {item.requiresRateInput && (
+              <label>Entered cost/rate excl. VAT<input required type="number" min="0" step="0.01" value={item.enteredRate} onChange={(e) => updateEnteredRate(item.priceItemId, e.target.value)} /></label>
+            )}
+          </div>
           <button type="button" className="secondary" onClick={() => removeItem(item.priceItemId)}>Remove</button>
         </div>
       ))}

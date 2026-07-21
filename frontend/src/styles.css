@@ -248,7 +248,7 @@ textarea { min-height: 92px; resize: vertical; }
 }
 
 .detail-panel .selected-line {
-  grid-template-columns: minmax(0, 1fr) 92px auto;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) auto;
 }
 
 @media (max-width: 640px) {
@@ -465,18 +465,52 @@ textarea { min-height: 92px; resize: vertical; }
   }
 }
 
-.quote-category-field {
-  margin-bottom: 14px !important;
+.quote-summary .selected-line {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) auto;
 }
 
-.quote-summary .selected-line {
-  grid-template-columns: minmax(0, 1fr) 92px auto;
-}
+.trade-item-picker { display: grid; gap: 14px; }
+.quote-step-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.quote-step-heading > div { display: flex; align-items: center; gap: 9px; }
+.quote-step-heading span { background: #18725f; color: #fff; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+.quote-step-heading h3 { margin: 0; font-size: 17px; }
+.quote-step-heading > small { color: #506f11; background: var(--mrs-lime-soft); border-radius: 999px; padding: 6px 9px; font-weight: 800; }
+.line-item-heading { margin-top: 7px; padding-top: 15px; border-top: 1px solid var(--mrs-border); }
+.field-help { margin: -7px 0 0; color: var(--mrs-muted); font-size: 13px; }
+.trade-groups { display: grid; gap: 9px; }
+.trade-group { border: 1px solid var(--mrs-border); border-radius: 9px; padding: 10px; background: #fbfcfb; }
+.trade-group > strong { display: block; margin-bottom: 8px; color: #536265; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.trade-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 7px; }
+.trade-option { border: 1px solid #cbd8d7; border-radius: 8px; background: #fff; padding: 9px 10px; min-height: 50px; color: var(--mrs-ink); text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trade-option > span { display: flex; align-items: center; gap: 6px; font-weight: 800; }
+.trade-option small { color: var(--mrs-muted); white-space: nowrap; }
+.trade-option.selected { border-color: #18725f; background: #edf7f3; box-shadow: inset 3px 0 #18725f; }
+.trade-browse-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
+.trade-browse-tabs button { border: 1px solid #cbd8d7; border-radius: 999px; background: #fff; padding: 8px 12px; font-weight: 800; color: #405055; }
+.trade-browse-tabs button.active { border-color: #18725f; background: #18725f; color: #fff; }
+.catalog-search { position: relative; display: flex; align-items: center; }
+.catalog-search svg { position: absolute; left: 12px; color: var(--mrs-muted); pointer-events: none; }
+.catalog-search input { padding-left: 39px; }
+.automatic-fee-note { border-left: 4px solid var(--mrs-lime-dark); background: var(--mrs-lime-soft); color: #425717; border-radius: 5px; padding: 9px 11px; font-size: 12px; font-weight: 700; }
+.grouped-item-list { gap: 14px; }
+.catalog-category { display: grid; gap: 7px; }
+.catalog-category h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 7px 4px; background: #fff; color: #536265; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+.item-row em { display: block; margin-top: 4px; color: #506f11; font-size: 11px; font-style: normal; font-weight: 800; }
+.item-row em.pricing-note { color: var(--mrs-muted); font-weight: 700; }
+.system-fee-badge { display: inline-block; margin-left: 7px; border-radius: 999px; background: var(--mrs-lime-soft); color: #506f11; padding: 3px 7px; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+.trade-empty { margin-top: 2px; }
+.selected-line-inputs { display: grid; gap: 7px; }
+.selected-line-inputs label { font-size: 11px; }
+.selected-line-inputs input { padding: 8px 9px; }
 
 @media (max-width: 640px) {
   .quote-summary .selected-line {
     grid-template-columns: 1fr;
   }
+  .detail-panel .selected-line { grid-template-columns: 1fr; }
+  .trade-options { grid-template-columns: 1fr; }
+  .quote-step-heading { align-items: flex-start; }
+  .quote-step-heading > small { display: none; }
 }
 
 .photo-grid button {

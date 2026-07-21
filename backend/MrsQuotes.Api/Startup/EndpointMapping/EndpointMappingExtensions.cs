@@ -51,9 +51,9 @@ public static class EndpointMappingExtensions
 
         app.MapGet("/api/clients", (ClientHandler handler, string? search) => handler.Search(search))
             .RequireAuthorization(PolicyNames.ClientDirectory);
-        app.MapGet("/api/price-items", (PricingHandler handler, string? group, ClaimsPrincipal principal) =>
-            handler.GetItems(group, principal));
-        app.MapGet("/api/price-sections", (PricingHandler handler) => handler.GetSections());
+        app.MapGet("/api/price-items", (PricingHandler handler, string? trade, ClaimsPrincipal principal) =>
+            handler.GetItems(trade, principal));
+        app.MapGet("/api/price-trades", (PricingHandler handler) => handler.GetTrades());
 
         app.MapGet("/api/appointments", (AppointmentHandler handler, int? assessorId, ClaimsPrincipal principal) =>
             handler.GetCalendar(assessorId, principal));

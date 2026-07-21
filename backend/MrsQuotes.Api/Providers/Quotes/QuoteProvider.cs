@@ -315,27 +315,91 @@ public sealed class QuoteProvider(
         }
         var ids = requested.Select(x => x.PriceItemId).ToArray();
         var prices = await context.PriceItems.AsNoTracking()
-            .Where(x => ids.Contains(x.Id) && x.Active)
+            .Where(x => ids.Contains(x.Id) && x.Active && x.ScheduleVersion == 2026)
             .ToDictionaryAsync(x => x.Id, cancellationToken);
         if (prices.Count != ids.Length)
         {
             throw new InvalidOperationException("A selected price item is no longer available.");
         }
 
-        return requested.Select(input =>
+        if (prices.Values.Any(x => x.SystemGenerated))
+        {
+            throw new InvalidOperationException("Automatic fees cannot be selected or removed manually.");
+        }
+
+        var quoteItems = requested.Select(input =>
         {
             if (input.Quantity <= 0) throw new InvalidOperationException("Quantities must be greater than zero.");
             var price = prices[input.PriceItemId];
-            return new QuoteItem
-            {
-                PriceItemId = price.Id,
-                Description = price.Description,
-                Unit = price.Unit,
-                Quantity = input.Quantity,
-                UnitRate = price.Rate,
-                LineTotal = decimal.Round(input.Quantity * price.Rate, 2)
-            };
+            var unitRate = CalculateUnitRate(price, input.EnteredRate);
+            return CreateQuoteItem(price, input.Quantity, unitRate, input.EnteredRate, false);
         }).ToList();
+
+        var automaticFeeCodes = prices.Values
+            .Select(x => x.AutomaticFeeCode)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToArray();
+        if (automaticFeeCodes.Length == 0) return quoteItems;
+
+        var automaticFees = await context.PriceItems.AsNoTracking()
+            .Where(x => x.Active && x.ScheduleVersion == 2026 && x.SystemGenerated
+                && x.ItemCode != null && automaticFeeCodes.Contains(x.ItemCode))
+            .OrderBy(x => x.TradeName)
+            .ToListAsync(cancellationToken);
+        if (automaticFees.Count != automaticFeeCodes.Length)
+        {
+            throw new InvalidOperationException("The 2026 automatic fee configuration is incomplete. Contact an administrator.");
+        }
+
+        quoteItems.AddRange(automaticFees.Select(fee =>
+            CreateQuoteItem(fee, 1, fee.Rate, null, true)));
+        return quoteItems;
+    }
+
+    private static decimal CalculateUnitRate(PriceItem price, decimal? enteredRate)
+    {
+        if (price.PricingMode == "fixed") return price.Rate;
+        if (!enteredRate.HasValue)
+        {
+            throw new InvalidOperationException($"Enter the required excl. VAT amount for '{price.Description}'.");
+        }
+        if (enteredRate.Value < 0)
+        {
+            throw new InvalidOperationException("Entered excl. VAT amounts cannot be negative.");
+        }
+
+        return price.PricingMode switch
+        {
+            "cost" => decimal.Round(enteredRate.Value, 2),
+            "cost-plus" => decimal.Round(enteredRate.Value * (1 + (price.MarkupPercentage ?? 0) / 100), 2),
+            "manual" => decimal.Round(enteredRate.Value, 2),
+            _ => throw new InvalidOperationException($"Unsupported pricing rule '{price.PricingMode}'.")
+        };
+    }
+
+    private static QuoteItem CreateQuoteItem(
+        PriceItem price,
+        decimal quantity,
+        decimal unitRate,
+        decimal? inputAmount,
+        bool systemGenerated)
+    {
+        return new QuoteItem
+        {
+            PriceItemId = price.Id,
+            TradeCode = price.TradeCode,
+            TradeName = price.TradeName,
+            Category = price.Category,
+            Description = price.Description,
+            Unit = price.Unit,
+            Quantity = quantity,
+            InputAmount = inputAmount,
+            UnitRate = unitRate,
+            LineTotal = decimal.Round(quantity * unitRate, 2),
+            SystemGenerated = systemGenerated
+        };
     }
 
     private static bool CanAccess(Quote quote, int userId, string role)
@@ -378,11 +442,16 @@ public sealed class QuoteProvider(
             {
                 Id = x.Id,
                 PriceItemId = x.PriceItemId,
+                TradeCode = x.TradeCode,
+                TradeName = x.TradeName,
+                Category = x.Category,
                 Description = x.Description,
                 Unit = x.Unit,
                 Quantity = x.Quantity,
+                InputAmount = x.InputAmount,
                 UnitRate = x.UnitRate,
-                LineTotal = x.LineTotal
+                LineTotal = x.LineTotal,
+                SystemGenerated = x.SystemGenerated
             }).ToList(),
             Photos = quote.Status == "completed"
                 ? []

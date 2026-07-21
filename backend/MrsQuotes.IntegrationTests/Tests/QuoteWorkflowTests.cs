@@ -60,11 +60,17 @@ public sealed class QuoteWorkflowTests
 
         var assessorAuth = await LoginAsync("assessor@example.test");
         Authorize(assessorAuth);
+        var price = await _factory.GetAutomaticFeeEligibleItemAsync();
+        var geyserFault = await _factory.GetGeyserFaultItemAsync();
         using var multipart = new MultipartFormDataContent();
         var payload = JsonSerializer.Serialize(new QuotePayload
         {
             AppointmentId = appointment!.Id!.Value,
-            Items = [new QuoteItemInput { PriceItemId = 1, Quantity = 2 }]
+            Items =
+            [
+                new QuoteItemInput { PriceItemId = price.Id, Quantity = 2 },
+                new QuoteItemInput { PriceItemId = geyserFault.Id, Quantity = 1 }
+            ]
         });
         multipart.Add(new StringContent(payload, Encoding.UTF8), "payload");
         var quoteResponse = await _client.PostAsync("/api/quotes", multipart);
@@ -74,7 +80,9 @@ public sealed class QuoteWorkflowTests
         Authorize(quoteAdminAuth);
         var quotes = await _client.GetFromJsonAsync<List<QuoteDto>>("/api/quotes");
         Assert.That(quotes, Has.Count.EqualTo(1));
-        Assert.That(quotes![0].Subtotal, Is.EqualTo(1700m));
+        Assert.That(quotes![0].Subtotal, Is.EqualTo(decimal.Round(price.Rate * 2 + geyserFault.Rate + 937m, 2)));
+        Assert.That(quotes[0].Items.Count(x => x.SystemGenerated), Is.EqualTo(1));
+        Assert.That(quotes[0].Items.Single(x => x.SystemGenerated).Description, Does.Contain("plumbing"));
 
         var calendar = await _client.GetFromJsonAsync<List<AppointmentDto>>("/api/appointments");
         Assert.That(calendar, Has.Count.EqualTo(1));

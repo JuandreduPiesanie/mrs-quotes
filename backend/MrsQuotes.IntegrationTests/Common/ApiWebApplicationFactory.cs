@@ -45,6 +45,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
         using var scope = Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<MrsQuotesDbContext>();
         await context.Database.EnsureCreatedAsync();
+        var environment = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+        await DatabaseInitializer.SeedReferenceDataAsync(context, environment);
         if (!await context.Clients.AnyAsync())
         {
             context.Clients.Add(new MrsQuotes.Api.Database.Models.Client
@@ -53,5 +55,29 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             });
             await context.SaveChangesAsync();
         }
+    }
+
+    public async Task<(int Id, decimal Rate)> GetAutomaticFeeEligibleItemAsync()
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<MrsQuotesDbContext>();
+        var item = await context.PriceItems.AsNoTracking()
+            .Where(x => x.Active && !x.SystemGenerated && x.AutomaticFeeCode == "OUT26-STARTUP-PLUMBING"
+                && x.PricingMode == "fixed")
+            .OrderBy(x => x.Id)
+            .FirstAsync();
+        return (item.Id, item.Rate);
+    }
+
+    public async Task<(int Id, decimal Rate)> GetGeyserFaultItemAsync()
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<MrsQuotesDbContext>();
+        var item = await context.PriceItems.AsNoTracking()
+            .Where(x => x.Active && !x.SystemGenerated && x.TradeCode == "geyser"
+                && x.AutomaticFeeCode == "OUT26-STARTUP-PLUMBING" && x.PricingMode == "fixed")
+            .OrderBy(x => x.Id)
+            .FirstAsync();
+        return (item.Id, item.Rate);
     }
 }

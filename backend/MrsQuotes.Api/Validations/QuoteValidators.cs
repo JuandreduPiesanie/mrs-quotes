@@ -13,6 +13,7 @@ public sealed class QuotePayloadValidator : AbstractValidator<QuotePayload>
         {
             item.RuleFor(x => x.PriceItemId).GreaterThan(0);
             item.RuleFor(x => x.Quantity).GreaterThan(0);
+            item.RuleFor(x => x.EnteredRate).GreaterThanOrEqualTo(0).When(x => x.EnteredRate.HasValue);
         });
     }
 }
