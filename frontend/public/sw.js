@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mrs-quotes-v2';
+const CACHE_NAME = 'mrs-quotes-v3';
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',

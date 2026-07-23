@@ -19,7 +19,7 @@ button { cursor: pointer; }
 .brand span, .profile span { display: block; color: #b5c5c7; font-size: 13px; margin-top: 3px; }
 
 nav { display: grid; gap: 8px; }
-.nav { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: #dce8e8; display: flex; align-items: center; gap: 10px; padding: 0 12px; text-align: left; }
+.nav { width: 100%; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: #dce8e8; display: flex; align-items: center; gap: 10px; padding: 0 12px; text-align: left; text-decoration: none; }
 .nav.active, .nav:hover { background: #223940; color: white; }
 .profile { margin-top: auto; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.14); }
 .profile div { min-width: 0; flex: 1; }

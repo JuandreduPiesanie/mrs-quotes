@@ -1,91 +1,97 @@
 # MRS Quotes
 
-MRS Quotes schedules insurance-repair assessments and routes submitted quotes from assessors to their assigned Quote Administrators.
+MRS Quotes is an internal web application for scheduling insurance-repair assessments and preparing, reviewing, and administering repair quotes. Field assessors use a guided three-step quote builder, while office users manage appointments, assignments, users, and submitted quotes.
 
-## Business workflow
+## Technology stack
 
-1. A Schedule Administrator creates an appointment for an assessor.
-2. The assessor completes the visit and submits the quote with line items and photos.
-3. The appointment leaves the assessor calendar and appears as an outstanding quote and calendar task for the Quote Administrator captured when the quote is submitted. Later assessor reassignment does not move historical quotes.
-4. The Quote Administrator downloads the photos and uploads them to the company's OneDrive or SharePoint quote folder.
-5. Completion requires both the ERP quote number and the OneDrive or SharePoint folder URL.
-6. The Quote Administrator confirms every photo is present in the archive. The system retains the completed quote and archive URL, keeps local recovery copies for 48 hours, then purges them from the VPS.
-7. Management maintains assessor-to-Quote-Administrator assignments.
+### Backend
 
-## OUTsurance 2026 quote controls
+- .NET 10 Minimal API
+- Entity Framework Core
+- SQL Server
+- JWT authentication with role-based authorization
+- FluentValidation
+- OpenAPI and Scalar API documentation
 
-The field quote builder uses only the **OUTsurance Building Rates July 2026** schedule. The Schedule Administrator does not choose the scope: the assessor selects one or more trades at the site, then searches and adds line items within those trades.
+### Frontend
 
-Current system-enforced controls:
+- React 19 and TypeScript
+- Vite
+- Redux Toolkit and RTK Query
+- React Router
+- Material UI and MUI Data Grid
+- Progressive Web App support
 
-- Startup fees are hidden from the selectable catalogue and are added by the API. There is no startup-fee override or reason workflow.
-- A fee is added at most once for each applicable trade rule, even when several qualifying line items are selected.
-- General plumbing and once-off geyser fault work share one plumbing startup fee, so selecting both does not duplicate it.
-- Ceilings and painting share one combined startup fee.
-- General building startup applies only to qualifying building work; excavation, compaction, and concrete-only selections do not trigger it.
-- Tiling, built-in cupboards, and metal/steel each use their own automatic startup fee.
-- Trades without a 2026 startup rule do not receive one. This includes leak detection, roofing/waterproofing, thatching, carpentry, electrical/security, air-conditioning, boreholes, and swimming pools.
-- Fixed rates are server-priced. Cost, cost-plus, and calculated items require the assessor to enter the applicable excl. VAT base amount; configured markup is applied by the API.
-- PDF page numbers and the source workbook's VAT/example calculation rows are not stored as quote catalogue data.
+### Infrastructure
 
-Minimum-fee rules are not automatically applied in this first implementation. Until that rule engine is added, the Quote Administrator must still check the 2026 Section E, built-in-cupboard, and precast-walling minimums before capturing the final ERP quote.
+- Docker Compose
+- Nginx
+- SQL Server 2022
 
-The normalized catalogue is stored in `backend/MrsQuotes.Api/SeedData/outsurance-rates-2026.json`. When a new schedule is received, it should be imported as a new version and reviewed before activation; the 2026 data should not be edited into 2027 rates in place.
-
-## Roles
-
-- Admin: unrestricted system access, including completing the assessor quote workflow on behalf of the assessor assigned to an appointment, user registration, roles, and assignments.
-- Management: manages assessor assignments and has operational visibility.
-- Schedule Administrator: schedules assessor appointments.
-- Quote Administrator: receives submitted quotes from assigned assessors.
-- Assessor: sees assigned appointments and submits or updates quotes.
-
-The initial Admin is created from the login screen's first-time setup flow. Setup closes after the first account is created.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment and production-operation instructions.
 
 ## Architecture
 
-    .
-    +-- backend/
-    |   +-- MrsQuotes.Api/                 .NET 10 Minimal API, EF Core, JWT
-    |   +-- MrsQuotes.Models/              Shared request/response contracts
-    |   +-- MrsQuotes.Client/              Typed API client for tools and tests
-    |   +-- MrsQuotes.IntegrationTests/    End-to-end API tests
-    |   +-- MrsQuotes.slnx
-    +-- frontend/                          React 19 and Vite installable PWA
-    +-- docker-compose.yml                 Web, API, and SQL Server containers
-    +-- .env.example
-    +-- DEPLOYMENT.md
+The backend API is the authoritative source for authentication, permissions, quote data, pricing, and validation. Entity Framework Core handles persistence and database migrations.
 
-The API uses SQL Server and applies EF Core migrations automatically at startup. It includes a clean initial migration, starter pricing items, and the existing client list as seed data. Photos use persistent VPS storage while a quote is outstanding. The tablet compresses supported large images before upload, quote views load small thumbnails lazily, and ZIP downloads stream without buffering the complete archive. On completion, verified local photos enter a 48-hour recovery window before purge; quote data and the archived photo count remain in SQL Server.
+The frontend uses a feature-based structure:
 
-## Local development
+- `frontend/src/app/` contains application setup, routing, the Redux store, and shared hooks.
+- `frontend/src/features/` contains the authentication, calendar, scheduling, assignment, user, and quote features.
+- `frontend/src/features/*/domain/` contains feature models and domain logic.
+- `frontend/src/features/*/state/` contains Redux slices and selectors.
+- `frontend/src/services/` contains typed API DTOs, RTK Query endpoints, session storage, and media access.
+- `frontend/src/shared/` contains reusable UI components and utilities.
 
-Requirements: .NET 10 SDK, Node.js 22 or newer, and SQL Server LocalDB or another SQL Server instance.
+RTK Query manages API data and caching, while Redux Toolkit manages client-side workflow and authentication state. React Router provides URL-based navigation and protected, role-aware routes.
 
-Start the backend from the repository root:
+## Repository structure
 
-    dotnet restore backend\MrsQuotes.slnx
-    dotnet run --project backend\MrsQuotes.Api\MrsQuotes.Api.csproj
+```text
+.
+|-- backend/
+|   |-- MrsQuotes.Api/                 .NET API, database migrations, and seed data
+|   |-- MrsQuotes.Models/              Shared C# request and response contracts
+|   |-- MrsQuotes.Client/              Typed API client
+|   |-- MrsQuotes.IntegrationTests/    API integration-test project
+|   `-- MrsQuotes.slnx
+|-- frontend/                           React TypeScript application
+|-- scripts/                            Supporting import scripts
+|-- docs/                               UX mockups
+|-- docker-compose.yml
+|-- DEPLOYMENT.md
+`-- README.md
+```
 
-Start the frontend:
+## Run locally
 
-    cd frontend
-    npm install
-    npm run dev
+### Requirements
 
-The web app opens at http://localhost:5173. Vite proxies API requests to http://localhost:4000.
+- .NET 10 SDK
+- Node.js 22 or newer
+- SQL Server LocalDB or another SQL Server instance
 
-Useful validation:
+By default, the API uses the `MrsQuotes` database on `(localdb)\MSSQLLocalDB`. To use another SQL Server instance, update the `Database` connection string in `backend/MrsQuotes.Api/appsettings.json` or provide it through configuration.
 
-    dotnet build backend\MrsQuotes.slnx
-    npm run build --prefix frontend
+### Run the backend
 
-## Docker
+From the repository root:
 
-    Copy-Item .env.example .env
-    # Replace the placeholder SQL and JWT secrets in .env
-    docker compose up -d --build
+```powershell
+dotnet restore backend\MrsQuotes.slnx
+dotnet run --project backend\MrsQuotes.Api\MrsQuotes.Api.csproj
+```
 
-Open http://localhost:8080. SQL Server remains private inside the Compose network. API port 4000 is exposed for diagnostics.
+The API runs at `http://localhost:4000`. In Development, Scalar API documentation is available at `http://localhost:4000/scalar/v1`.
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for production and tablet installation notes.
+### Run the frontend
+
+Open a second terminal from the repository root:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+The frontend runs at `http://localhost:5173` and proxies API requests to `http://localhost:4000`.
