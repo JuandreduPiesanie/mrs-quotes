@@ -5,8 +5,10 @@ import { ROLES, type Role } from '../../app/roles';
 import { DateTimePicker } from '../../shared/components/DateTimePicker';
 import { PageTitle } from '../../shared/components/PageTitle';
 import { addDays, formatDateOnly, formatTime, isSameDay, startOfWeek } from '../../shared/date/dateUtils';
+import { useCurrentTime } from '../../shared/date/useCurrentTime';
 import { getApiErrorMessage, useCancelAppointmentMutation, useGetAppointmentsQuery, useGetAssessorsQuery, useGetClientsQuery, useUpdateAppointmentMutation } from '../../services/baseApi';
 import type { AppointmentDto, AppointmentRequestDto, UserDto } from '../../services/apiDtos';
+import { getQuoteSla } from '../quotes/domain/quoteSla';
 
 interface CalendarViewProps {
   role: Role;
@@ -18,6 +20,7 @@ export function CalendarView({ role, onStartQuote, onOpenQuote }: CalendarViewPr
   const [assessorId, setAssessorId] = useState('');
   const [editingAppointment, setEditingAppointment] = useState<AppointmentDto | null>(null);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const currentTime = useCurrentTime();
 
   const isAssessor = role === ROLES.ASSESSOR;
   const isAdmin = role === ROLES.ADMIN;
@@ -88,8 +91,13 @@ export function CalendarView({ role, onStartQuote, onOpenQuote }: CalendarViewPr
               <span>{day.getDate()}</span>
             </div>
             <div className="calendar-day-body">
-              {appointmentsForDay(day).map((appt) => (
-                <button type="button" className={appt.calendar_type === 'quote_task' ? 'calendar-event quote-task-event' : 'calendar-event'} key={`${appt.calendar_type}-${appt.id || appt.quote_id}`} onClick={() => handleEventClick(appt)}>
+              {appointmentsForDay(day).map((appt) => {
+                const sla = appt.calendar_type === 'quote_task' ? getQuoteSla(appt.appointment_start, currentTime) : null;
+                const eventClassName = sla
+                  ? `calendar-event quote-task-event sla-${sla.state}`
+                  : 'calendar-event';
+                return (
+                <button type="button" className={eventClassName} key={`${appt.calendar_type}-${appt.id || appt.quote_id}`} onClick={() => handleEventClick(appt)}>
                   <span>
                     {formatTime(appt.appointment_start)}
                     {appt.appointment_end ? ` - ${formatTime(appt.appointment_end)}` : ''}
@@ -100,7 +108,8 @@ export function CalendarView({ role, onStartQuote, onOpenQuote }: CalendarViewPr
                   {appt.assessor_name && <small>Assessor: {appt.assessor_name}</small>}
                   {isManagement && appt.quote_administrator_name && <small>Quote admin: {appt.quote_administrator_name}</small>}
                 </button>
-              ))}
+                );
+              })}
               {appointmentsForDay(day).length === 0 && <div className="calendar-empty">{isQuoteTaskCalendar ? 'No outstanding quotes' : 'No appointments'}</div>}
             </div>
           </div>

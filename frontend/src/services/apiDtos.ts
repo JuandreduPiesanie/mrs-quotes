@@ -109,6 +109,7 @@ export interface AppointmentDto {
 
 export interface QuoteItemInputDto {
   priceItemId: number;
+  location: string;
   quantity: number;
   enteredRate: number | null;
 }
@@ -141,6 +142,7 @@ export interface QuoteItemDto {
   price_item_id: number;
   trade_code: string;
   trade_name: string;
+  location: string;
   category: string;
   description: string;
   unit: string;

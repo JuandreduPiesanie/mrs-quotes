@@ -12,9 +12,11 @@ export interface QuoteAppointmentContext {
 }
 
 export interface SelectedQuoteItem {
+  selectionId: string;
   priceItemId: number;
   tradeCode: string;
   tradeName: string;
+  location: string;
   category: string;
   description: string;
   unit: string;

@@ -97,6 +97,7 @@ public sealed class MrsQuotesDbContext(DbContextOptions<MrsQuotesDbContext> opti
         {
             entity.Property(x => x.TradeCode).HasMaxLength(100);
             entity.Property(x => x.TradeName).HasMaxLength(150);
+            entity.Property(x => x.Location).HasMaxLength(200);
             entity.Property(x => x.Category).HasMaxLength(150);
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.Unit).HasMaxLength(80);

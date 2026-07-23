@@ -68,8 +68,8 @@ public sealed class QuoteWorkflowTests
             AppointmentId = appointment!.Id!.Value,
             Items =
             [
-                new QuoteItemInput { PriceItemId = price.Id, Quantity = 2 },
-                new QuoteItemInput { PriceItemId = geyserFault.Id, Quantity = 1 }
+                new QuoteItemInput { PriceItemId = price.Id, Location = "Kitchen", Quantity = 2 },
+                new QuoteItemInput { PriceItemId = geyserFault.Id, Location = "Outside Patio", Quantity = 1 }
             ]
         });
         multipart.Add(new StringContent(payload, Encoding.UTF8), "payload");

@@ -309,11 +309,19 @@ public sealed class QuoteProvider(
         CancellationToken cancellationToken)
     {
         if (requested.Count == 0) throw new InvalidOperationException("At least one line item is required.");
-        if (requested.Select(x => x.PriceItemId).Distinct().Count() != requested.Count)
+        if (requested.Any(x => string.IsNullOrWhiteSpace(x.Location)))
         {
-            throw new InvalidOperationException("A price item can only be selected once.");
+            throw new InvalidOperationException("Every line item must have a work location.");
         }
-        var ids = requested.Select(x => x.PriceItemId).ToArray();
+        if (requested.GroupBy(x => new
+            {
+                x.PriceItemId,
+                Location = x.Location.Trim().ToUpperInvariant()
+            }).Any(group => group.Count() > 1))
+        {
+            throw new InvalidOperationException("A price item can only be selected once per location.");
+        }
+        var ids = requested.Select(x => x.PriceItemId).Distinct().ToArray();
         var prices = await context.PriceItems.AsNoTracking()
             .Where(x => ids.Contains(x.Id) && x.Active && x.ScheduleVersion == 2026)
             .ToDictionaryAsync(x => x.Id, cancellationToken);
@@ -332,7 +340,7 @@ public sealed class QuoteProvider(
             if (input.Quantity <= 0) throw new InvalidOperationException("Quantities must be greater than zero.");
             var price = prices[input.PriceItemId];
             var unitRate = CalculateUnitRate(price, input.EnteredRate);
-            return CreateQuoteItem(price, input.Quantity, unitRate, input.EnteredRate, false);
+            return CreateQuoteItem(price, input.Location, input.Quantity, unitRate, input.EnteredRate, false);
         }).ToList();
 
         var automaticFeeCodes = prices.Values
@@ -353,9 +361,9 @@ public sealed class QuoteProvider(
             throw new InvalidOperationException("The 2026 automatic fee configuration is incomplete. Contact an administrator.");
         }
 
-        quoteItems.AddRange(automaticFees.Select(fee =>
-            CreateQuoteItem(fee, 1, fee.Rate, null, true)));
-        return quoteItems;
+        var automaticFeeItems = automaticFees.Select(fee =>
+            CreateQuoteItem(fee, "", 1, fee.Rate, null, true));
+        return automaticFeeItems.Concat(quoteItems).ToList();
     }
 
     private static decimal CalculateUnitRate(PriceItem price, decimal? enteredRate)
@@ -381,6 +389,7 @@ public sealed class QuoteProvider(
 
     private static QuoteItem CreateQuoteItem(
         PriceItem price,
+        string location,
         decimal quantity,
         decimal unitRate,
         decimal? inputAmount,
@@ -391,6 +400,7 @@ public sealed class QuoteProvider(
             PriceItemId = price.Id,
             TradeCode = price.TradeCode,
             TradeName = price.TradeName,
+            Location = systemGenerated ? "" : location.Trim(),
             Category = price.Category,
             Description = price.Description,
             Unit = price.Unit,
@@ -438,12 +448,13 @@ public sealed class QuoteProvider(
             CompletedAt = quote.CompletedAt,
             CreatedAt = quote.CreatedAt,
             PhotoCount = quote.Status == "completed" ? quote.ArchivedPhotoCount : quote.Photos.Count,
-            Items = quote.Items.OrderBy(x => x.Id).Select(x => new QuoteItemDto
+            Items = quote.Items.OrderByDescending(x => x.SystemGenerated).ThenBy(x => x.Id).Select(x => new QuoteItemDto
             {
                 Id = x.Id,
                 PriceItemId = x.PriceItemId,
                 TradeCode = x.TradeCode,
                 TradeName = x.TradeName,
+                Location = x.Location,
                 Category = x.Category,
                 Description = x.Description,
                 Unit = x.Unit,

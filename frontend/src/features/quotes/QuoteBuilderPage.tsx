@@ -11,6 +11,7 @@ import {
   Home,
   ImagePlus,
   LockKeyhole,
+  MapPin,
   Minus,
   Plus,
   Search,
@@ -30,6 +31,7 @@ import { restoreSelectedItems } from './domain/quoteRules';
 import type { PriceItem, QuoteAppointmentContext, SelectedQuoteItem, Trade } from './domain/quoteTypes';
 import {
   activeTradeChanged,
+  activeLocationChanged,
   catalogCategoryChanged,
   catalogSearchChanged,
   enteredRateChanged,
@@ -57,6 +59,19 @@ const TRADE_GROUP_META: Record<string, { label: string; description: string; ico
   'Specialist Services': { label: 'Specialist Services', description: 'Specialist installations and equipment services.', icon: Settings },
   'Professional Services': { label: 'Professional Services', description: 'Inspections, assessments and professional reporting.', icon: ClipboardCheck }
 };
+
+const COMMON_WORK_LOCATIONS = [
+  'Kitchen',
+  'Bathroom',
+  'Bedroom',
+  'Lounge',
+  'Dining Room',
+  'Passage',
+  'Garage',
+  'Roof',
+  'Outside Patio',
+  'Exterior'
+];
 
 interface QuoteWizardStepperProps {
   step: 1 | 2 | 3;
@@ -171,9 +186,9 @@ function TradeSelectionStep({ tradeGroups, selectedTradeCodes, onToggle, onConti
 
 interface QuoteBasketProps {
   selected: SelectedQuoteItem[];
-  onQuantity: (id: number, value: number | string) => void;
-  onRate: (id: number, value: number | string) => void;
-  onRemove: (id: number) => void;
+  onQuantity: (id: string, value: number | string) => void;
+  onRate: (id: string, value: number | string) => void;
+  onRemove: (id: string) => void;
 }
 
 function QuoteBasket({ selected, onQuantity, onRate, onRemove }: QuoteBasketProps) {
@@ -181,26 +196,27 @@ function QuoteBasket({ selected, onQuantity, onRate, onRemove }: QuoteBasketProp
     <aside className="panel wizard-side-panel quote-basket">
       <h2>Quote basket</h2>
       {selected.length === 0 && <div className="empty compact-empty">Add line items from the catalogue.</div>}
+      {selected.some((item) => item.automaticStartupFee) && <div className="basket-automatic-fee"><Check size={18} />Automatic startup fee will be included</div>}
       <div className="basket-lines">
         {selected.map((item) => (
-          <div className="basket-line" key={item.priceItemId}>
-            <div className="basket-line-heading"><strong>{item.description}</strong><button type="button" onClick={() => onRemove(item.priceItemId)} aria-label={`Remove ${item.description}`}><Trash2 size={16} /></button></div>
+          <div className="basket-line" key={item.selectionId}>
+            <div className="basket-line-heading"><strong>{item.description}</strong><button type="button" onClick={() => onRemove(item.selectionId)} aria-label={`Remove ${item.description} from ${item.location}`}><Trash2 size={16} /></button></div>
+            <span className="basket-line-location"><MapPin size={14} />{item.location}</span>
             <span>{item.tradeName}</span>
             <div className="quantity-control">
-              <button type="button" onClick={() => onQuantity(item.priceItemId, Math.max(0.01, Number(item.quantity || 0) - 1))}><Minus size={15} /></button>
-              <input required aria-label={`Quantity for ${item.description}`} type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => onQuantity(item.priceItemId, e.target.value)} />
-              <button type="button" onClick={() => onQuantity(item.priceItemId, Number(item.quantity || 0) + 1)}><Plus size={15} /></button>
+              <button type="button" onClick={() => onQuantity(item.selectionId, Math.max(0.01, Number(item.quantity || 0) - 1))}><Minus size={15} /></button>
+              <input required aria-label={`Quantity for ${item.description} in ${item.location}`} type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => onQuantity(item.selectionId, e.target.value)} />
+              <button type="button" onClick={() => onQuantity(item.selectionId, Number(item.quantity || 0) + 1)}><Plus size={15} /></button>
               <small>{normalizeQuoteUnit(item.unit)}</small>
             </div>
             {item.requiresRateInput && (
               <label>{item.pricingMode === 'manual' ? 'Calculated rate excl. VAT' : `Supplier cost excl. VAT${item.markupPercentage ? ` (+${item.markupPercentage}%)` : ''}`}
-                <input required type="number" min="0" step="0.01" value={item.enteredRate} onChange={(e) => onRate(item.priceItemId, e.target.value)} />
+                <input required type="number" min="0" step="0.01" value={item.enteredRate} onChange={(e) => onRate(item.selectionId, e.target.value)} />
               </label>
             )}
           </div>
         ))}
       </div>
-      {selected.some((item) => item.automaticStartupFee) && <div className="basket-automatic-fee"><Check size={18} />Automatic startup fee will be included</div>}
     </aside>
   );
 }
@@ -215,19 +231,23 @@ interface LineItemSelectionStepProps extends QuoteBasketProps {
   onSearch: (value: string) => void;
   category: string;
   onCategory: (value: string) => void;
+  location: string;
+  onLocation: (value: string) => void;
   canReview: boolean;
-  onAdd: (item: PriceItem) => void;
+  onAdd: (item: PriceItem, location: string) => void;
   onBack: () => void;
   onReview: () => void;
 }
 
-function LineItemSelectionStep({ trades, selectedTradeCodes, activeTrade, onActiveTrade, items, search, onSearch, category, onCategory, selected, canReview, onAdd, onQuantity, onRate, onRemove, onBack, onReview }: LineItemSelectionStepProps) {
+function LineItemSelectionStep({ trades, selectedTradeCodes, activeTrade, onActiveTrade, items, search, onSearch, category, onCategory, location, onLocation, selected, canReview, onAdd, onQuantity, onRate, onRemove, onBack, onReview }: LineItemSelectionStepProps) {
   const activeTradeDetails = trades.find((trade) => trade.code === activeTrade);
   const categories: string[] = [...new Set<string>(items.map((item) => String(item.category)))];
   const term = search.trim().toLowerCase();
   const visibleItems = items.filter((item) => (category === 'All' || item.category === category)
     && (!term || item.description.toLowerCase().includes(term) || item.category.toLowerCase().includes(term)));
-  const selectedIds = new Set(selected.map((item) => item.priceItemId));
+  const normalizedLocation = location.trim().toLocaleLowerCase();
+  const selectedIds = new Set(selected.filter((item) => item.location.toLocaleLowerCase() === normalizedLocation).map((item) => item.priceItemId));
+  const locationSuggestions = [...new Set([...COMMON_WORK_LOCATIONS, ...selected.map((item) => item.location)])];
   const hasStartupRule = items.some((item) => item.automatic_startup_fee);
 
   return (
@@ -236,6 +256,17 @@ function LineItemSelectionStep({ trades, selectedTradeCodes, activeTrade, onActi
         <div className="wizard-panel-heading item-step-heading">
           <div><span>Step 2</span><h2>Add line items</h2></div>
           <button type="button" className="text-button" onClick={onBack}>Edit trades</button>
+        </div>
+        <div className="work-location-selector">
+          <MapPin size={22} />
+          <label>
+            <span>Work location</span>
+            <input list="quote-work-locations" maxLength={200} value={location} onChange={(e) => onLocation(e.target.value)} placeholder="For example: Kitchen or Outside Patio" />
+            <datalist id="quote-work-locations">
+              {locationSuggestions.map((name) => <option value={name} key={name} />)}
+            </datalist>
+            <small>Every line item added below will be grouped under this location.</small>
+          </label>
         </div>
         <div className="selected-trade-tabs">
           {selectedTradeCodes.map((code) => {
@@ -259,7 +290,7 @@ function LineItemSelectionStep({ trades, selectedTradeCodes, activeTrade, onActi
               <div className={added ? 'wizard-item-row added' : 'wizard-item-row'} key={item.id}>
                 <div><strong>{item.description}</strong>{item.pricing_note && <small>{item.pricing_note}</small>}</div>
                 <span>{normalizeQuoteUnit(item.unit)}</span>
-                <button type="button" disabled={added} onClick={() => onAdd(item)}>{added ? <><Check size={16} />Added</> : <><Plus size={16} />Add</>}</button>
+                <button type="button" disabled={!normalizedLocation || added} onClick={() => onAdd(item, location.trim())}>{added ? <><Check size={16} />Added</> : !normalizedLocation ? 'Choose location' : <><Plus size={16} />Add</>}</button>
               </div>
             );
           })}
@@ -299,27 +330,28 @@ interface QuoteReviewStepProps {
 }
 
 function QuoteReviewStep({ selected, photos, existingPhotoCount, onPhotos, onRemovePhoto, onBack, message, submitting, isEditing }: QuoteReviewStepProps) {
-  const [openTrade, setOpenTrade] = useState(selected[0]?.tradeCode || '');
-  const groups = selected.reduce<{ code: string; name: string; items: SelectedQuoteItem[] }[]>((result, item) => {
-    const group = result.find((entry) => entry.code === item.tradeCode);
+  const [openLocation, setOpenLocation] = useState(selected[0]?.location || '');
+  const groups = selected.reduce<{ location: string; items: SelectedQuoteItem[] }[]>((result, item) => {
+    const group = result.find((entry) => entry.location.toLocaleLowerCase() === item.location.toLocaleLowerCase());
     if (group) group.items.push(item);
-    else result.push({ code: item.tradeCode, name: item.tradeName, items: [item] });
+    else result.push({ location: item.location, items: [item] });
     return result;
   }, []);
   const photoCount = photos.length + existingPhotoCount;
+  const hasStartupFees = selected.some((item) => item.automaticStartupFee);
 
   return (
     <div className="quote-wizard-layout">
       <div className="panel wizard-main-panel review-panel">
         <div className="wizard-panel-heading"><div><span>Step 3</span><h2>Review quote scope</h2></div><p>Confirm quantities, automatic rules and photos before submitting.</p></div>
         <div className="review-trade-groups">
+          {hasStartupFees && <div className="review-startup-line review-quote-fee"><LockKeyhole size={17} /><span>Applicable startup fees are added automatically at quote level.</span></div>}
           {groups.map((group) => {
-            const open = openTrade === group.code;
-            const hasStartup = group.items.some((item) => item.automaticStartupFee);
+            const open = openLocation === group.location;
             return (
-              <section className={open ? 'review-trade-group open' : 'review-trade-group'} key={group.code}>
-                <button type="button" onClick={() => setOpenTrade(open ? '' : group.code)}>{open ? <ChevronDown size={20} /> : <ChevronRight size={20} />}<strong>{group.name}</strong><span>{group.items.length} {group.items.length === 1 ? 'item' : 'items'}</span></button>
-                {open && <div className="review-trade-lines">{group.items.map((item) => <div key={item.priceItemId}><span>{item.description}</span><strong>{quoteQuantityLabel(item.quantity, item.unit)}</strong></div>)}{hasStartup && <div className="review-startup-line"><LockKeyhole size={17} /><span>Applicable startup fee — added automatically</span></div>}</div>}
+              <section className={open ? 'review-trade-group open' : 'review-trade-group'} key={group.location}>
+                <button type="button" onClick={() => setOpenLocation(open ? '' : group.location)}>{open ? <ChevronDown size={20} /> : <ChevronRight size={20} />}<strong><MapPin size={17} />{group.location}</strong><span>{group.items.length} {group.items.length === 1 ? 'item' : 'items'}</span></button>
+                {open && <div className="review-trade-lines">{group.items.map((item) => <div key={item.selectionId}><span>{item.description}<small>{item.tradeName}</small></span><strong>{quoteQuantityLabel(item.quantity, item.unit)}</strong></div>)}</div>}
               </section>
             );
           })}
@@ -337,7 +369,7 @@ function QuoteReviewStep({ selected, photos, existingPhotoCount, onPhotos, onRem
 
       <aside className="panel wizard-side-panel ready-panel">
         <h2>Ready to submit</h2>
-        <div className="ready-checks"><div><Check size={19} /><span>{groups.length} trades selected</span></div><div><Check size={19} /><span>{selected.length} line items</span></div><div><Check size={19} /><span>Startup fees checked automatically</span></div><div><Check size={19} /><span>{photoCount} site photos attached</span></div></div>
+        <div className="ready-checks"><div><Check size={19} /><span>{groups.length} work {groups.length === 1 ? 'location' : 'locations'}</span></div><div><Check size={19} /><span>{selected.length} line items</span></div><div><Check size={19} /><span>Startup fees checked automatically</span></div><div><Check size={19} /><span>{photoCount} site photos attached</span></div></div>
         <div className="pricing-hidden-note">Pricing remains hidden from the assessor.</div>
         {message && <div className={message.includes('submitted') || message.includes('updated') ? 'success' : submitting ? 'wizard-info' : 'error'}>{message}</div>}
         <button type="button" className="secondary" onClick={onBack}>Back to line items</button>
@@ -359,7 +391,7 @@ export function QuoteBuilder({ appointment, quoteId, onDone }: QuoteBuilderProps
   const dispatch = useAppDispatch();
   const wizard = useAppSelector(selectQuoteWizard);
   const canReview = useAppSelector(selectCanReviewQuote);
-  const { step, selectedTradeCodes, activeTradeCode, catalogSearch, catalogCategory, selectedItems } = wizard;
+  const { step, selectedTradeCodes, activeTradeCode, activeLocation, catalogSearch, catalogCategory, selectedItems } = wizard;
   const { data: trades = [], error: tradesError } = useGetTradesQuery();
   const { data: catalogItems = [], error: catalogError } = useGetPriceItemsQuery(activeTradeCode, { skip: !activeTradeCode });
   const { data: existingQuote, error: quoteError } = useGetQuoteQuery(quoteId, { skip: !quoteId });
@@ -445,6 +477,7 @@ export function QuoteBuilder({ appointment, quoteId, onDone }: QuoteBuilderProps
         appointmentId: appointment?.id,
         items: selectedItems.map((item) => ({
           priceItemId: item.priceItemId,
+          location: item.location,
           quantity: Number(item.quantity),
           enteredRate: item.requiresRateInput ? Number(item.enteredRate) : null
         }))
@@ -494,9 +527,11 @@ export function QuoteBuilder({ appointment, quoteId, onDone }: QuoteBuilderProps
           onSearch={(value) => dispatch(catalogSearchChanged(value))}
           category={catalogCategory}
           onCategory={(value) => dispatch(catalogCategoryChanged(value))}
+          location={activeLocation}
+          onLocation={(value) => dispatch(activeLocationChanged(value))}
           selected={selectedItems}
           canReview={canReview}
-          onAdd={(item) => dispatch(lineItemAdded(item))}
+          onAdd={(item, location) => dispatch(lineItemAdded({ item, location }))}
           onQuantity={(id, value) => dispatch(quantityChanged({ id, quantity: value === '' ? '' : Number(value) }))}
           onRate={(id, value) => dispatch(enteredRateChanged({ id, enteredRate: value === '' ? '' : Number(value) }))}
           onRemove={(id) => dispatch(lineItemRemoved(id))}

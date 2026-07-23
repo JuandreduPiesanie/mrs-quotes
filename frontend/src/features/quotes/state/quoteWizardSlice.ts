@@ -6,6 +6,7 @@ export interface QuoteWizardState {
   step: 1 | 2 | 3;
   selectedTradeCodes: string[];
   activeTradeCode: string;
+  activeLocation: string;
   catalogSearch: string;
   catalogCategory: string;
   selectedItems: SelectedQuoteItem[];
@@ -15,6 +16,7 @@ const initialState: QuoteWizardState = {
   step: 1,
   selectedTradeCodes: [],
   activeTradeCode: '',
+  activeLocation: '',
   catalogSearch: '',
   catalogCategory: 'All',
   selectedItems: []
@@ -31,7 +33,8 @@ const quoteWizardSlice = createSlice({
         step: action.payload.tradeCodes.length ? 2 : 1,
         selectedItems: action.payload.items,
         selectedTradeCodes: action.payload.tradeCodes,
-        activeTradeCode: action.payload.tradeCodes[0] || ''
+        activeTradeCode: action.payload.tradeCodes[0] || '',
+        activeLocation: action.payload.items[0]?.location || ''
       };
     },
     stepChanged(state, action: PayloadAction<1 | 2 | 3>) {
@@ -51,26 +54,30 @@ const quoteWizardSlice = createSlice({
       state.catalogSearch = '';
       state.catalogCategory = 'All';
     },
+    activeLocationChanged(state, action: PayloadAction<string>) {
+      state.activeLocation = action.payload;
+    },
     catalogSearchChanged(state, action: PayloadAction<string>) {
       state.catalogSearch = action.payload;
     },
     catalogCategoryChanged(state, action: PayloadAction<string>) {
       state.catalogCategory = action.payload;
     },
-    lineItemAdded(state, action: PayloadAction<PriceItem>) {
-      if (!state.selectedItems.some((item) => item.priceItemId === action.payload.id)) {
-        state.selectedItems.push(createSelectedItem(action.payload));
+    lineItemAdded(state, action: PayloadAction<{ item: PriceItem; location: string }>) {
+      const selectedItem = createSelectedItem(action.payload.item, action.payload.location);
+      if (selectedItem.location && !state.selectedItems.some((item) => item.selectionId === selectedItem.selectionId)) {
+        state.selectedItems.push(selectedItem);
       }
     },
-    lineItemRemoved(state, action: PayloadAction<number>) {
-      state.selectedItems = state.selectedItems.filter((item) => item.priceItemId !== action.payload);
+    lineItemRemoved(state, action: PayloadAction<string>) {
+      state.selectedItems = state.selectedItems.filter((item) => item.selectionId !== action.payload);
     },
-    quantityChanged(state, action: PayloadAction<{ id: number; quantity: number | '' }>) {
-      const item = state.selectedItems.find((line) => line.priceItemId === action.payload.id);
+    quantityChanged(state, action: PayloadAction<{ id: string; quantity: number | '' }>) {
+      const item = state.selectedItems.find((line) => line.selectionId === action.payload.id);
       if (item) item.quantity = action.payload.quantity;
     },
-    enteredRateChanged(state, action: PayloadAction<{ id: number; enteredRate: number | '' }>) {
-      const item = state.selectedItems.find((line) => line.priceItemId === action.payload.id);
+    enteredRateChanged(state, action: PayloadAction<{ id: string; enteredRate: number | '' }>) {
+      const item = state.selectedItems.find((line) => line.selectionId === action.payload.id);
       if (item) item.enteredRate = action.payload.enteredRate;
     }
   }
@@ -83,6 +90,7 @@ export const {
   tradeSelected,
   tradeRemoved,
   activeTradeChanged,
+  activeLocationChanged,
   catalogSearchChanged,
   catalogCategoryChanged,
   lineItemAdded,

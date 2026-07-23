@@ -9,6 +9,7 @@ public sealed class QuoteItem
     public PriceItem PriceItem { get; set; } = null!;
     public string TradeCode { get; set; } = "";
     public string TradeName { get; set; } = "";
+    public string Location { get; set; } = "";
     public string Category { get; set; } = "";
     public string Description { get; set; } = "";
     public string Unit { get; set; } = "";

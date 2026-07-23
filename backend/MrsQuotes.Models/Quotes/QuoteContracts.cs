@@ -11,6 +11,7 @@ public sealed class QuotePayload
 public sealed class QuoteItemInput
 {
     public int PriceItemId { get; set; }
+    public string Location { get; set; } = "";
     public decimal Quantity { get; set; }
     public decimal? EnteredRate { get; set; }
 }
@@ -83,6 +84,7 @@ public sealed class QuoteItemDto
     public string TradeCode { get; set; } = "";
     [JsonPropertyName("trade_name")]
     public string TradeName { get; set; } = "";
+    public string Location { get; set; } = "";
     public string Category { get; set; } = "";
     public string Description { get; set; } = "";
     public string Unit { get; set; } = "";

@@ -1,5 +1,5 @@
-import React from 'react';
-import { CalendarDays, ClipboardList, LogOut, Plus, UserRound } from 'lucide-react';
+import React, { useState } from 'react';
+import { CalendarDays, ClipboardList, LogOut, Menu, Plus, UserRound, X } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router';
 import mrsLogo from '../assets/mrs-logo.png';
 import { useAppDispatch, useAppSelector } from './hooks';
@@ -15,6 +15,7 @@ export default function App() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const session = useAppSelector((state) => state.auth.session);
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   function saveSession(next: Session) {
     writeSession(next);
@@ -22,6 +23,7 @@ export default function App() {
   }
 
   function logout() {
+    setNavigationOpen(false);
     clearSession();
     dispatch(baseApi.util.resetApiState());
     dispatch(quoteWizardReset());
@@ -42,18 +44,30 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={navigationOpen ? 'sidebar nav-open' : 'sidebar'}>
         <div className="brand logo-brand">
           <img className="brand-logo" src={mrsLogo} alt="Maintenance Risk Solutions" />
           <span>{ROLE_LABELS[role] || 'MRS User'}</span>
         </div>
 
-        <nav>
-          <NavButton icon={<CalendarDays />} label="Calendar" to="/calendar" />
-          {canViewQuotes && <NavButton icon={<ClipboardList />} label={isAssessor ? 'My Quotes' : 'Outstanding Quotes'} to="/quotes" />}
-          {(isAdmin || isScheduleAdministrator) && <NavButton icon={<Plus />} label="Schedule" to="/schedule" />}
-          {(isAdmin || isManagement) && <NavButton icon={<UserRound />} label="Assignments" to="/assignments" />}
-          {isAdmin && <NavButton icon={<Plus />} label="Users" to="/users" />}
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-label={navigationOpen ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={navigationOpen}
+          aria-controls="primary-navigation"
+          onClick={() => setNavigationOpen((open) => !open)}
+        >
+          {navigationOpen ? <X size={24} /> : <Menu size={24} />}
+          <span>{navigationOpen ? 'Close' : 'Menu'}</span>
+        </button>
+
+        <nav id="primary-navigation" className="sidebar-nav">
+          <NavButton icon={<CalendarDays />} label="Calendar" to="/calendar" onNavigate={() => setNavigationOpen(false)} />
+          {canViewQuotes && <NavButton icon={<ClipboardList />} label={isAssessor ? 'My Quotes' : 'Outstanding Quotes'} to="/quotes" onNavigate={() => setNavigationOpen(false)} />}
+          {(isAdmin || isScheduleAdministrator) && <NavButton icon={<Plus />} label="Schedule" to="/schedule" onNavigate={() => setNavigationOpen(false)} />}
+          {(isAdmin || isManagement) && <NavButton icon={<UserRound />} label="Assignments" to="/assignments" onNavigate={() => setNavigationOpen(false)} />}
+          {isAdmin && <NavButton icon={<Plus />} label="Users" to="/users" onNavigate={() => setNavigationOpen(false)} />}
         </nav>
 
         <div className="profile">
@@ -73,6 +87,6 @@ export default function App() {
   );
 }
 
-function NavButton({ icon, label, to }: { icon: React.ReactElement<{ size?: number }>; label: string; to: string }) {
-  return <NavLink className={({ isActive }) => isActive ? 'nav active' : 'nav'} to={to}>{React.cloneElement(icon, { size: 19 })}<span>{label}</span></NavLink>;
+function NavButton({ icon, label, to, onNavigate }: { icon: React.ReactElement<{ size?: number }>; label: string; to: string; onNavigate: () => void }) {
+  return <NavLink className={({ isActive }) => isActive ? 'nav active' : 'nav'} to={to} onClick={onNavigate}>{React.cloneElement(icon, { size: 19 })}<span>{label}</span></NavLink>;
 }

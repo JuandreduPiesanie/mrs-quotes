@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button as MuiButton,
@@ -11,16 +11,18 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { DataGrid } from '@mui/x-data-grid';
-import { ArrowLeft, Check, Download, Search } from 'lucide-react';
+import { DataGrid, useGridApiRef } from '@mui/x-data-grid';
+import { ArrowLeft, Check, Download, MapPin, Search } from 'lucide-react';
 import { ROLES, type Role } from '../../app/roles';
 import { PageTitle } from '../../shared/components/PageTitle';
 import { formatDate } from '../../shared/date/dateUtils';
+import { useCurrentTime } from '../../shared/date/useCurrentTime';
 import { quoteQuantityLabel } from '../../shared/quote/quoteFormatters';
 import { useAppSelector } from '../../app/hooks';
 import { getApiErrorMessage, useCompleteQuoteMutation, useGetAssessorsQuery, useGetQuotesQuery, useLazyGetQuoteQuery } from '../../services/baseApi';
 import { downloadQuotePhotos, loadProtectedPhoto } from '../../services/mediaService';
 import type { QuoteDto, QuotePhotoDto, QuoteStatus } from '../../services/apiDtos';
+import { getQuoteSla } from './domain/quoteSla';
 
 interface QuotesViewProps {
   role: Role;
@@ -41,6 +43,8 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
   const [photoArchiveUrl, setPhotoArchiveUrl] = useState('');
   const [archiveVerified, setArchiveVerified] = useState(false);
   const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>('submitted');
+  const quoteGridApiRef = useGridApiRef();
+  const currentTime = useCurrentTime();
 
   const isAdmin = role === ROLES.ADMIN;
   const isAssessor = role === ROLES.ASSESSOR;
@@ -61,26 +65,48 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
       .catch((error) => setDownloadMessage(getApiErrorMessage(error)));
   }, [initialQuoteId]);
 
-  const filtered = quotes.filter((q) => `${q.quote_number} ${q.customer_name} ${q.site_address} ${q.assessor_name} ${q.quote_administrator_name || ''} ${q.erp_quote_number || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = useMemo(
+    () => quotes.filter((q) => `${q.quote_number} ${q.customer_name} ${q.site_address} ${q.assessor_name} ${q.quote_administrator_name || ''} ${q.erp_quote_number || ''}`.toLowerCase().includes(query.toLowerCase())),
+    [query, quotes]
+  );
 
-  const adminRows = filtered.map((quote) => ({
-    ...quote,
-    quote_label: quote.quote_number || `Quote #${quote.id}`,
-    submitted_label: formatDate(quote.created_at),
-    subtotal_label: `R ${Number(quote.subtotal || 0).toFixed(2)}`
-  }));
+  const adminRows = useMemo(() => filtered.map((quote) => {
+    const sla = getQuoteSla(quote.created_at, currentTime);
+    return {
+      ...quote,
+      quote_label: quote.quote_number || `Quote #${quote.id}`,
+      submitted_label: formatDate(quote.created_at),
+      sla_state: sla.state,
+      sla_label: sla.label,
+      subtotal_label: `R ${Number(quote.subtotal || 0).toFixed(2)}`
+    };
+  }), [currentTime, filtered]);
 
-  const adminColumns = [
-    { field: 'quote_label', headerName: 'Quote', minWidth: 130, flex: 0.7 },
-    { field: 'customer_name', headerName: 'Client', minWidth: 220, flex: 1.3 },
-    { field: 'site_address', headerName: 'Site Address', minWidth: 260, flex: 1.5 },
-    { field: 'assessor_name', headerName: 'Assessor', minWidth: 170, flex: 1 },
-    ...(isManagement ? [{ field: 'quote_administrator_name', headerName: 'Quote Admin', minWidth: 180, flex: 1 }] : []),
-    { field: 'submitted_label', headerName: 'Submitted', minWidth: 150, flex: 0.8 },
-    { field: 'photo_count', headerName: 'Photos', minWidth: 95, flex: 0.45, type: 'number' as const },
-    { field: 'status', headerName: 'Status', minWidth: 110, flex: 0.55 },
-    { field: 'subtotal_label', headerName: 'Reference Value', minWidth: 145, flex: 0.7 }
-  ];
+  const adminColumns = useMemo(() => [
+    { field: 'quote_label', headerName: 'Quote' },
+    { field: 'customer_name', headerName: 'Client' },
+    { field: 'site_address', headerName: 'Site Address' },
+    { field: 'assessor_name', headerName: 'Assessor' },
+    ...(isManagement ? [{ field: 'quote_administrator_name', headerName: 'Quote Admin' }] : []),
+    { field: 'submitted_label', headerName: 'Submitted' },
+    { field: 'photo_count', headerName: 'Photos', type: 'number' as const },
+    { field: 'status', headerName: 'Status' },
+    { field: 'subtotal_label', headerName: 'Reference Value' }
+  ], [isManagement, quoteStatus]);
+
+  useEffect(() => {
+    if (!canReviewQuotes || adminRows.length === 0) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      void quoteGridApiRef.current.autosizeColumns({
+        includeHeaders: true,
+        includeOutliers: true,
+        expand: false
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [adminColumns, adminRows, canReviewQuotes, quoteGridApiRef]);
 
   async function downloadPhotos() {
     if (!active) return;
@@ -131,6 +157,15 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
   }
 
   function renderQuoteDetail({ fullScreen = false }: { fullScreen?: boolean } = {}) {
+    const locationGroups = active?.items.filter((item) => !item.system_generated).reduce<{ location: string; items: QuoteDto['items'] }[]>((groups, item) => {
+      const location = item.location || 'Unspecified';
+      const existing = groups.find((group) => group.location.toLocaleLowerCase() === location.toLocaleLowerCase());
+      if (existing) existing.items.push(item);
+      else groups.push({ location, items: [item] });
+      return groups;
+    }, []) || [];
+    const automaticFees = active?.items.filter((item) => item.system_generated) || [];
+
     return (
       <div className={fullScreen ? 'panel detail-panel quote-detail-screen' : 'panel detail-panel'}>
         {!active && <div className="empty">Select a quote to view details.</div>}
@@ -152,9 +187,26 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
                 {canEditQuote && active.status === 'submitted' && <button className="secondary" onClick={() => onEditQuote(active)}>Edit quote</button>}
               </div>
             </div>
-            <div className="line-table">
-              {active.items.map((item) => (
-                <div key={item.id}><span>{item.description}{item.system_generated && <em className="system-fee-badge">Automatic 2026 fee</em>}</span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+            <div className="quote-location-groups">
+              {automaticFees.length > 0 && (
+                <section className="quote-location-group automatic-fee-group">
+                  <h3>Automatic fees</h3>
+                  <div className={canReviewQuotes ? 'line-table priced' : 'line-table'}>
+                    {automaticFees.map((item) => (
+                      <div key={item.id}><span>{item.description}<em className="system-fee-badge">Automatic 2026 fee</em></span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {locationGroups.map((group) => (
+                <section className="quote-location-group" key={group.location}>
+                  <h3><MapPin size={18} />{group.location}</h3>
+                  <div className={canReviewQuotes ? 'line-table priced' : 'line-table'}>
+                    {group.items.map((item) => (
+                      <div key={item.id}><span>{item.description}<small>{item.trade_name}</small></span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
             {canReviewQuotes && <h3>Reference total: R {active.subtotal.toFixed(2)}</h3>}
@@ -233,7 +285,7 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
     : isAssessor ? 'Track and edit submitted quotes until the quote administrator completes them.' : 'Open a submitted quote to review the full packet.';
 
   return (
-    <section className="workspace">
+    <section className="workspace quotes-workspace">
       <PageTitle title={title} subtitle={subtitle} />
 
       <div className="quote-tools">
@@ -253,12 +305,16 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
       {canReviewQuotes ? (
         <div className="panel admin-quotes-table">
           <DataGrid
+            apiRef={quoteGridApiRef}
             rows={adminRows}
             columns={adminColumns}
             autoHeight
+            autosizeOnMount
+            autosizeOptions={{ includeHeaders: true, includeOutliers: true, expand: false }}
             disableRowSelectionOnClick
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+            getRowClassName={(params) => quoteStatus === 'submitted' ? `sla-row-${params.row.sla_state}` : ''}
             onRowClick={(params) => selectQuote(Number(params.id))}
             sx={{
               border: 0,
@@ -270,14 +326,18 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
       ) : (
         <div className="quote-browser">
           <div className="quote-list">
-            {filtered.map((quote) => (
-              <button key={quote.id} className="quote-card" onClick={() => selectQuote(quote.id)}>
+            {filtered.map((quote) => {
+              const sla = getQuoteSla(quote.created_at, currentTime);
+              const quoteCardClassName = quoteStatus === 'submitted' ? `quote-card sla-${sla.state}` : 'quote-card';
+              return (
+              <button key={quote.id} className={quoteCardClassName} onClick={() => selectQuote(quote.id)}>
                 <strong>{quote.quote_number || `Quote #${quote.id}`}</strong>
                 <span>{quote.customer_name}</span>
                 <span>{quote.site_address}</span>
                 <small>{quote.assessor_name} | {formatDate(quote.created_at)} | {quote.photo_count} photos</small>
               </button>
-            ))}
+              );
+            })}
             {filtered.length === 0 && <div className="empty">No quotes found for this view.</div>}
           </div>
           {renderQuoteDetail()}
