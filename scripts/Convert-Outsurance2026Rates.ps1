@@ -193,7 +193,7 @@ try {
             tradeGroup = $trade[2]
             category = $cleanCategory
             description = $description
-            unit = if ([string]::IsNullOrWhiteSpace([string]$values['D'])) { 'item' } else { ([string]$values['D']).Trim() }
+            unit = if ([string]::IsNullOrWhiteSpace([string]$values['D']) -or ([string]$values['D']).Trim() -match '^\d+(?:[.,]\d+)?$') { 'item' } else { ([string]$values['D']).Trim() }
             rate = [decimal]::Round($rate, 2)
             pricingMode = $pricing[0]
             markupPercentage = $pricing[1]

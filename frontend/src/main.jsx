@@ -15,17 +15,30 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { DataGrid } from '@mui/x-data-grid';
 import {
   ArrowLeft,
+  ArrowRight,
+  Building2,
   CalendarDays,
   Camera,
   Check,
+  ChevronDown,
+  ChevronRight,
+  ClipboardCheck,
   ClipboardList,
   Clock,
   Download,
+  Home,
+  ImagePlus,
+  LockKeyhole,
   LogOut,
   MapPin,
+  Minus,
   Plus,
   Search,
   Send,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  Wrench,
   UserRound
 } from 'lucide-react';
 import mrsLogo from './assets/mrs-logo.png';
@@ -53,6 +66,7 @@ function App() {
   const [quoteAppointment, setQuoteAppointment] = useState(null);
   const [quoteToEditId, setQuoteToEditId] = useState(null);
   const [quoteToOpenId, setQuoteToOpenId] = useState(null);
+  const [quoteReturnView, setQuoteReturnView] = useState('calendar');
 
   const api = useMemo(() => createApi(session?.token), [session?.token]);
 
@@ -105,9 +119,9 @@ function App() {
       </aside>
 
       <main>
-        {canBuildQuotes && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView('calendar'); }} />}
-        {view === 'calendar' && <CalendarView api={api} role={role} onStartQuote={(appointment) => { setQuoteAppointment(appointment); setQuoteToEditId(appointment.quote_id || null); setView('quote'); }} onOpenQuote={(quoteId) => { setQuoteToOpenId(quoteId); setView('quotes'); }} />}
-        {view === 'quotes' && canViewQuotes && <QuotesView api={api} role={role} initialQuoteId={quoteToOpenId} onOpenedInitialQuote={() => setQuoteToOpenId(null)} />}
+        {canBuildQuotes && view === 'quote' && <QuoteBuilder api={api} appointment={quoteAppointment} quoteId={quoteToEditId} onDone={() => { setQuoteAppointment(null); setQuoteToEditId(null); setView(quoteReturnView); }} />}
+        {view === 'calendar' && <CalendarView api={api} role={role} onStartQuote={(appointment) => { setQuoteAppointment(appointment); setQuoteToEditId(appointment.quote_id || null); setQuoteReturnView('calendar'); setView('quote'); }} onOpenQuote={(quoteId) => { setQuoteToOpenId(quoteId); setView('quotes'); }} />}
+        {view === 'quotes' && canViewQuotes && <QuotesView api={api} role={role} initialQuoteId={quoteToOpenId} onOpenedInitialQuote={() => setQuoteToOpenId(null)} onEditQuote={(quote) => { setQuoteAppointment({ id: quote.appointment_id, customer_name: quote.customer_name, site_address: quote.site_address, request_details: quote.request_details }); setQuoteToEditId(quote.id); setQuoteReturnView('quotes'); setView('quote'); }} />}
         {(isAdmin || isScheduleAdministrator) && view === 'schedule' && <ScheduleView api={api} onCreated={() => setView('calendar')} />}
         {(isAdmin || isManagement) && view === 'assignments' && <AssignmentsView api={api} />}
         {isAdmin && view === 'users' && <UsersView api={api} />}
@@ -343,7 +357,7 @@ function TradeItemPicker({ api, onAdd, onTradeRemoved, initialTradeCodes = [] })
                 {group.items.map((item) => (
                   <button type="button" key={item.id} className="item-row" onClick={() => onAdd(item)}>
                     <span>{item.description}{item.pricing_note && <em className="pricing-note">{item.pricing_note}</em>}{item.automatic_startup_fee && <em>Startup fee applies automatically</em>}</span>
-                    <small>{item.unit}</small>
+                    <small>{normalizeQuoteUnit(item.unit)}</small>
                     <Plus size={17} />
                   </button>
                 ))}
@@ -359,33 +373,357 @@ function TradeItemPicker({ api, onAdd, onTradeRemoved, initialTradeCodes = [] })
   );
 }
 
+const TRADE_GROUP_META = {
+  Plumbing: { label: 'Plumbing', description: 'Plumbing installations, repairs and related services.', icon: Wrench },
+  Building: { label: 'Building & Maintenance', description: 'General building works, carpentry, painting and more.', icon: Building2 },
+  'Electrical & Security': { label: 'Electrical & Security', description: 'Electrical installations, security systems and automation.', icon: ShieldCheck },
+  Roofing: { label: 'Roofing', description: 'Roofing, waterproofing and roof maintenance.', icon: Home },
+  'Specialist Services': { label: 'Specialist Services', description: 'Specialist installations and equipment services.', icon: Settings },
+  'Professional Services': { label: 'Professional Services', description: 'Inspections, assessments and professional reporting.', icon: ClipboardCheck }
+};
+
+function normalizeQuoteUnit(unit) {
+  const value = String(unit || 'item').trim();
+  return /^\d+(?:[.,]\d+)?$/.test(value) ? 'item' : value;
+}
+
+function quoteQuantityLabel(quantity, unit) {
+  return `${quantity} ${normalizeQuoteUnit(unit)}`;
+}
+
+function QuoteWizardStepper({ step, canOpenItems, canReview, onChange }) {
+  const steps = [
+    { number: 1, label: 'Choose trades', enabled: true },
+    { number: 2, label: 'Add line items', enabled: canOpenItems },
+    { number: 3, label: 'Review & submit', enabled: canReview }
+  ];
+
+  return (
+    <div className="quote-wizard-stepper" aria-label="Quote progress">
+      {steps.map((item, index) => {
+        const complete = step > item.number;
+        const active = step === item.number;
+        return (
+          <React.Fragment key={item.number}>
+            {index > 0 && <span className={complete || active ? 'step-connector active' : 'step-connector'} />}
+            <button type="button" className={active ? 'wizard-step active' : complete ? 'wizard-step complete' : 'wizard-step'} disabled={!item.enabled} onClick={() => item.enabled && onChange(item.number)}>
+              <span>{complete ? <Check size={17} /> : item.number}</span>
+              <strong>{item.label}</strong>
+            </button>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function TradeSelectionStep({ tradeGroups, selectedTradeCodes, onToggle, onContinue }) {
+  const [expandedGroup, setExpandedGroup] = useState('Plumbing');
+  const [search, setSearch] = useState('');
+  const selectedTrades = tradeGroups.flatMap((group) => group.trades).filter((trade) => selectedTradeCodes.includes(trade.code));
+  const term = search.trim().toLowerCase();
+  const visibleGroups = tradeGroups.filter((group) => !term
+    || (TRADE_GROUP_META[group.name]?.label || group.name).toLowerCase().includes(term)
+    || group.trades.some((trade) => trade.name.toLowerCase().includes(term)));
+
+  return (
+    <div className="quote-wizard-layout">
+      <div className="panel wizard-main-panel">
+        <div className="wizard-panel-heading">
+          <div><span>Step 1</span><h2>Choose the work areas that apply</h2></div>
+          <p>Select every relevant trade. You can edit this before submitting.</p>
+        </div>
+        <label className="catalog-search wizard-search">
+          <Search size={19} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a trade" />
+        </label>
+
+        <div className="wizard-trade-groups">
+          {visibleGroups.map((group) => {
+            const meta = TRADE_GROUP_META[group.name] || { label: group.name, description: '', icon: ClipboardList };
+            const Icon = meta.icon;
+            const isExpanded = expandedGroup === group.name || Boolean(term);
+            const selectedCount = group.trades.filter((trade) => selectedTradeCodes.includes(trade.code)).length;
+            return (
+              <section className={isExpanded ? 'wizard-trade-group expanded' : 'wizard-trade-group'} key={group.name}>
+                <button type="button" className="wizard-trade-group-toggle" onClick={() => setExpandedGroup(isExpanded && !term ? '' : group.name)}>
+                  <span className="trade-group-icon"><Icon size={24} /></span>
+                  <span className="trade-group-copy"><strong>{meta.label}</strong><small>{meta.description}</small></span>
+                  <span className="trade-group-count">{selectedCount} selected</span>
+                  {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                </button>
+                {isExpanded && (
+                  <div className="wizard-trade-options">
+                    {group.trades.map((trade) => {
+                      const selected = selectedTradeCodes.includes(trade.code);
+                      return (
+                        <button type="button" key={trade.code} className={selected ? 'wizard-trade-option selected' : 'wizard-trade-option'} onClick={() => onToggle(trade.code)} aria-pressed={selected}>
+                          <span className="trade-checkbox">{selected && <Check size={16} />}</span>
+                          <strong>{trade.name}</strong>
+                          <small>{trade.item_count} items</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      </div>
+
+      <aside className="panel wizard-side-panel trade-summary-panel">
+        <h2>Quote summary</h2>
+        <p className="muted">Selected trades</p>
+        <div className="selected-trade-list">
+          {selectedTrades.map((trade) => (
+            <div key={trade.code}><Check size={16} /><span>{trade.name}</span><button type="button" onClick={() => onToggle(trade.code)} aria-label={`Remove ${trade.name}`}>×</button></div>
+          ))}
+          {selectedTrades.length === 0 && <div className="empty compact-empty">No trades selected yet.</div>}
+        </div>
+        <div className="trade-selection-total"><strong>{selectedTrades.length}</strong><span>{selectedTrades.length === 1 ? 'trade selected' : 'trades selected'}<small>Line items are added in the next step.</small></span></div>
+        <button type="button" className="primary wizard-primary" disabled={selectedTrades.length === 0} onClick={onContinue}>Continue to line items<ArrowRight size={18} /></button>
+      </aside>
+    </div>
+  );
+}
+
+function QuoteBasket({ selected, onQuantity, onRate, onRemove }) {
+  return (
+    <aside className="panel wizard-side-panel quote-basket">
+      <h2>Quote basket</h2>
+      {selected.length === 0 && <div className="empty compact-empty">Add line items from the catalogue.</div>}
+      <div className="basket-lines">
+        {selected.map((item) => (
+          <div className="basket-line" key={item.priceItemId}>
+            <div className="basket-line-heading"><strong>{item.description}</strong><button type="button" onClick={() => onRemove(item.priceItemId)} aria-label={`Remove ${item.description}`}><Trash2 size={16} /></button></div>
+            <span>{item.tradeName}</span>
+            <div className="quantity-control">
+              <button type="button" onClick={() => onQuantity(item.priceItemId, Math.max(0.01, Number(item.quantity || 0) - 1))}><Minus size={15} /></button>
+              <input required aria-label={`Quantity for ${item.description}`} type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => onQuantity(item.priceItemId, e.target.value)} />
+              <button type="button" onClick={() => onQuantity(item.priceItemId, Number(item.quantity || 0) + 1)}><Plus size={15} /></button>
+              <small>{normalizeQuoteUnit(item.unit)}</small>
+            </div>
+            {item.requiresRateInput && (
+              <label>{item.pricingMode === 'manual' ? 'Calculated rate excl. VAT' : `Supplier cost excl. VAT${item.markupPercentage ? ` (+${item.markupPercentage}%)` : ''}`}
+                <input required type="number" min="0" step="0.01" value={item.enteredRate} onChange={(e) => onRate(item.priceItemId, e.target.value)} />
+              </label>
+            )}
+          </div>
+        ))}
+      </div>
+      {selected.some((item) => item.automaticStartupFee) && <div className="basket-automatic-fee"><Check size={18} />Automatic startup fee will be included</div>}
+    </aside>
+  );
+}
+
+function LineItemSelectionStep({ trades, selectedTradeCodes, activeTrade, onActiveTrade, items, search, onSearch, category, onCategory, selected, canReview, onAdd, onQuantity, onRate, onRemove, onBack, onReview }) {
+  const activeTradeDetails = trades.find((trade) => trade.code === activeTrade);
+  const categories = [...new Set(items.map((item) => item.category))];
+  const term = search.trim().toLowerCase();
+  const visibleItems = items.filter((item) => (category === 'All' || item.category === category)
+    && (!term || item.description.toLowerCase().includes(term) || item.category.toLowerCase().includes(term)));
+  const selectedIds = new Set(selected.map((item) => item.priceItemId));
+  const hasStartupRule = items.some((item) => item.automatic_startup_fee);
+
+  return (
+    <div className="quote-wizard-layout">
+      <div className="panel wizard-main-panel">
+        <div className="wizard-panel-heading item-step-heading">
+          <div><span>Step 2</span><h2>Add line items</h2></div>
+          <button type="button" className="text-button" onClick={onBack}>Edit trades</button>
+        </div>
+        <div className="selected-trade-tabs">
+          {selectedTradeCodes.map((code) => {
+            const trade = trades.find((item) => item.code === code);
+            if (!trade) return null;
+            return <button type="button" key={code} className={activeTrade === code ? 'active' : ''} onClick={() => onActiveTrade(code)}>{trade.name}</button>;
+          })}
+        </div>
+        <label className="catalog-search wizard-search">
+          <Search size={19} />
+          <input value={search} onChange={(e) => onSearch(e.target.value)} placeholder={`Search ${activeTradeDetails?.name || 'trade'} items`} />
+        </label>
+        <div className="category-filter-tabs">
+          {['All', ...categories].map((name) => <button type="button" key={name} className={category === name ? 'active' : ''} onClick={() => onCategory(name)}>{name}</button>)}
+        </div>
+        {hasStartupRule && <div className="automatic-fee-note"><LockKeyhole size={17} />The applicable startup fee will be added automatically once.</div>}
+        <div className="wizard-item-list">
+          {visibleItems.map((item) => {
+            const added = selectedIds.has(item.id);
+            return (
+              <div className={added ? 'wizard-item-row added' : 'wizard-item-row'} key={item.id}>
+                <div><strong>{item.description}</strong>{item.pricing_note && <small>{item.pricing_note}</small>}</div>
+                <span>{normalizeQuoteUnit(item.unit)}</span>
+                <button type="button" disabled={added} onClick={() => onAdd(item)}>{added ? <><Check size={16} />Added</> : <><Plus size={16} />Add</>}</button>
+              </div>
+            );
+          })}
+          {visibleItems.length === 0 && <div className="empty">No matching line items.</div>}
+        </div>
+        <div className="wizard-mobile-actions"><button type="button" className="secondary" onClick={onBack}>Back</button><button type="button" className="primary" disabled={!canReview} onClick={onReview}>Review quote ({selected.length})</button></div>
+      </div>
+
+      <div className="wizard-side-stack">
+        <QuoteBasket selected={selected} onQuantity={onQuantity} onRate={onRate} onRemove={onRemove} />
+        <div className="wizard-side-actions"><button type="button" className="secondary" onClick={onBack}>Back</button><button type="button" className="primary" disabled={!canReview} onClick={onReview}>Review quote ({selected.length} {selected.length === 1 ? 'item' : 'items'})<ArrowRight size={18} /></button></div>
+      </div>
+    </div>
+  );
+}
+
+function LocalPhotoPreview({ file, onRemove }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  return <div className="local-photo-preview">{url && <img src={url} alt={file.name} />}<button type="button" onClick={onRemove} aria-label={`Remove ${file.name}`}>×</button></div>;
+}
+
+function QuoteReviewStep({ selected, photos, existingPhotoCount, onPhotos, onRemovePhoto, onBack, message, submitting, isEditing }) {
+  const [openTrade, setOpenTrade] = useState(selected[0]?.tradeCode || '');
+  const groups = selected.reduce((result, item) => {
+    const group = result.find((entry) => entry.code === item.tradeCode);
+    if (group) group.items.push(item);
+    else result.push({ code: item.tradeCode, name: item.tradeName, items: [item] });
+    return result;
+  }, []);
+  const photoCount = photos.length + existingPhotoCount;
+
+  return (
+    <div className="quote-wizard-layout">
+      <div className="panel wizard-main-panel review-panel">
+        <div className="wizard-panel-heading"><div><span>Step 3</span><h2>Review quote scope</h2></div><p>Confirm quantities, automatic rules and photos before submitting.</p></div>
+        <div className="review-trade-groups">
+          {groups.map((group) => {
+            const open = openTrade === group.code;
+            const hasStartup = group.items.some((item) => item.automaticStartupFee);
+            return (
+              <section className={open ? 'review-trade-group open' : 'review-trade-group'} key={group.code}>
+                <button type="button" onClick={() => setOpenTrade(open ? '' : group.code)}>{open ? <ChevronDown size={20} /> : <ChevronRight size={20} />}<strong>{group.name}</strong><span>{group.items.length} {group.items.length === 1 ? 'item' : 'items'}</span></button>
+                {open && <div className="review-trade-lines">{group.items.map((item) => <div key={item.priceItemId}><span>{item.description}</span><strong>{quoteQuantityLabel(item.quantity, item.unit)}</strong></div>)}{hasStartup && <div className="review-startup-line"><LockKeyhole size={17} /><span>Applicable startup fee — added automatically</span></div>}</div>}
+              </section>
+            );
+          })}
+        </div>
+
+        <div className="review-photos">
+          <h3>Site photos</h3>
+          <div className="review-photo-grid">
+            <label className="review-upload-box"><ImagePlus size={25} /><strong>Add site photos</strong><span>JPG, PNG or HEIC · Up to 50 photos</span><input type="file" multiple accept="image/*" onChange={(e) => onPhotos([...e.target.files])} /></label>
+            {photos.map((file, index) => <LocalPhotoPreview key={`${file.name}-${file.lastModified}-${index}`} file={file} onRemove={() => onRemovePhoto(index)} />)}
+            {existingPhotoCount > 0 && <div className="existing-photo-count"><Camera size={22} /><strong>{existingPhotoCount}</strong><span>existing photos</span></div>}
+          </div>
+        </div>
+      </div>
+
+      <aside className="panel wizard-side-panel ready-panel">
+        <h2>Ready to submit</h2>
+        <div className="ready-checks"><div><Check size={19} /><span>{groups.length} trades selected</span></div><div><Check size={19} /><span>{selected.length} line items</span></div><div><Check size={19} /><span>Startup fees checked automatically</span></div><div><Check size={19} /><span>{photoCount} site photos attached</span></div></div>
+        <div className="pricing-hidden-note">Pricing remains hidden from the assessor.</div>
+        {message && <div className={message.includes('submitted') || message.includes('updated') ? 'success' : submitting ? 'wizard-info' : 'error'}>{message}</div>}
+        <button type="button" className="secondary" onClick={onBack}>Back to line items</button>
+        <button className="primary" disabled={submitting}><Send size={18} />{submitting ? 'Preparing quote...' : isEditing ? 'Save quote' : 'Submit quote'}</button>
+        <small>This sends the quote to the assigned Quote Administrator.</small>
+      </aside>
+    </div>
+  );
+}
+
 function QuoteBuilder({ api, appointment, quoteId, onDone }) {
+  const [step, setStep] = useState(1);
+  const [trades, setTrades] = useState([]);
+  const [selectedTradeCodes, setSelectedTradeCodes] = useState([]);
+  const [activeTrade, setActiveTrade] = useState('');
+  const [catalogItems, setCatalogItems] = useState([]);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogCategory, setCatalogCategory] = useState('All');
   const [selected, setSelected] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [message, setMessage] = useState('');
   const [existingQuote, setExistingQuote] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api.trades().then(setTrades).catch((err) => setMessage(err.message));
+  }, [api]);
+
+  useEffect(() => {
+    setCatalogSearch('');
+    setCatalogCategory('All');
+    if (!activeTrade) {
+      setCatalogItems([]);
+      return;
+    }
+    api.prices(activeTrade).then(setCatalogItems).catch((err) => setMessage(err.message));
+  }, [api, activeTrade]);
 
   useEffect(() => {
     if (!quoteId) {
       setExistingQuote(null);
       setSelected([]);
+      setSelectedTradeCodes([]);
+      setActiveTrade('');
+      setPhotos([]);
+      setStep(1);
       return;
     }
     api.quote(quoteId).then((quote) => {
       setExistingQuote(quote);
-      setSelected(quote.items.filter((item) => !item.system_generated).map((item) => ({
+      const automaticFees = quote.items.filter((item) => item.system_generated);
+      const normalItems = quote.items.filter((item) => !item.system_generated).map((item) => ({
         priceItemId: item.price_item_id,
         tradeCode: item.trade_code,
         tradeName: item.trade_name,
         category: item.category,
         description: item.description,
-        unit: item.unit,
+        unit: normalizeQuoteUnit(item.unit),
         quantity: item.quantity,
         enteredRate: item.input_amount ?? '',
-        requiresRateInput: item.input_amount !== null
-      })));
+        requiresRateInput: item.input_amount !== null,
+        automaticStartupFee: automaticFees.some((fee) => fee.trade_code === item.trade_code)
+          || ((item.trade_code === 'geyser' || item.trade_code === 'general-plumbing')
+            && automaticFees.some((fee) => fee.description.toLowerCase().includes('plumbing')))
+      }));
+      const codes = [...new Set(normalItems.map((item) => item.tradeCode).filter(Boolean))];
+      setSelected(normalItems);
+      setSelectedTradeCodes(codes);
+      setActiveTrade(codes[0] || '');
+      setStep(codes.length ? 2 : 1);
     });
-  }, [api, quoteId]);
+  }, [api, quoteId, appointment?.id]);
+
+  const tradeGroups = useMemo(() => {
+    const groups = trades.reduce((result, trade) => {
+      const group = result.find((entry) => entry.name === trade.group);
+      if (group) group.trades.push(trade);
+      else result.push({ name: trade.group, trades: [trade] });
+      return result;
+    }, []);
+    const order = ['Plumbing', 'Building', 'Electrical & Security', 'Roofing', 'Specialist Services', 'Professional Services'];
+    return groups.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+  }, [trades]);
+
+  function toggleTrade(code) {
+    setSelectedTradeCodes((current) => {
+      if (current.includes(code)) {
+        const affectedItems = selected.filter((item) => item.tradeCode === code);
+        if (affectedItems.length > 0) {
+          const tradeName = trades.find((trade) => trade.code === code)?.name || 'this trade';
+          if (!window.confirm(`Remove ${tradeName}? Its ${affectedItems.length} selected line item(s) will also be removed.`)) return current;
+          setSelected((items) => items.filter((item) => item.tradeCode !== code));
+        }
+        const next = current.filter((item) => item !== code);
+        if (activeTrade === code) setActiveTrade(next[0] || '');
+        return next;
+      }
+      if (!activeTrade) setActiveTrade(code);
+      return [...current, code];
+    });
+  }
+
   function addItem(item) {
     setSelected((current) => current.some((line) => line.priceItemId === item.id)
       ? current
@@ -395,12 +733,13 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
         tradeName: item.trade_name,
         category: item.category,
         description: item.description,
-        unit: item.unit,
+        unit: normalizeQuoteUnit(item.unit),
         quantity: 1,
         enteredRate: '',
         requiresRateInput: item.requires_rate_input,
         pricingMode: item.pricing_mode,
-        markupPercentage: item.markup_percentage
+        markupPercentage: item.markup_percentage,
+        automaticStartupFee: item.automatic_startup_fee
       }]);
   }
 
@@ -420,9 +759,33 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
       : item));
   }
 
+  const canReview = selected.length > 0 && selected.every((item) => Number(item.quantity) > 0
+    && (!item.requiresRateInput || (item.enteredRate !== '' && Number(item.enteredRate) >= 0)));
+
+  function openLineItems() {
+    const nextTrade = activeTrade && selectedTradeCodes.includes(activeTrade) ? activeTrade : selectedTradeCodes[0];
+    setActiveTrade(nextTrade || '');
+    setMessage('');
+    setStep(2);
+  }
+
+  function openReview() {
+    if (!canReview) {
+      setMessage('Complete every quantity and required excl. VAT amount before reviewing the quote.');
+      return;
+    }
+    setMessage('');
+    setStep(3);
+  }
+
   async function submit(e) {
     e.preventDefault();
+    if (step !== 3 || !canReview) {
+      openReview();
+      return;
+    }
     setMessage('');
+    setSubmitting(true);
     try {
       setMessage(photos.length ? 'Optimizing photos for upload...' : '');
       const preparedPhotos = await preparePhotosForUpload(photos);
@@ -442,6 +805,8 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
       setTimeout(onDone, 600);
     } catch (err) {
       setMessage(err.message);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -455,49 +820,48 @@ function QuoteBuilder({ api, appointment, quoteId, onDone }) {
   }
 
   return (
-    <section className="workspace">
-      <PageTitle title={existingQuote ? `Edit ${existingQuote.quote_number}` : "Quick Estimate"} subtitle="Pick scope items and quantities. Assessor pricing stays hidden." />
-      <form className="quote-layout" onSubmit={submit}>
-        <div className="panel">
-          <div className="locked-details quote-context">
-            <div><span>Client</span><strong>{appointment.client_name || appointment.customer_name}</strong></div>
-            <div><span>Site address</span><strong>{appointment.site_address}</strong></div>
-            <div><span>Request</span><strong>{appointment.request_details}</strong></div>
-          </div>
+    <section className="workspace quote-wizard-workspace">
+      <div className="quote-wizard-title-row"><PageTitle title={existingQuote ? `Edit ${existingQuote.quote_number}` : 'Quick Estimate'} subtitle="A guided scope workflow for field assessors. Pricing stays hidden." /><span>OUTsurance 2026 rate schedule</span></div>
+      <div className="panel quote-wizard-context">
+        <div><span>Client</span><strong>{appointment.client_name || appointment.customer_name}</strong></div>
+        <div><span>Site address</span><strong>{appointment.site_address}</strong></div>
+        <div><span>Request</span><strong>{appointment.request_details}</strong></div>
+      </div>
+      <QuoteWizardStepper step={step} canOpenItems={selectedTradeCodes.length > 0} canReview={canReview} onChange={setStep} />
+      {message && step !== 3 && <div className="error wizard-page-message">{message}</div>}
 
-          <TradeItemPicker
-            api={api}
-            onAdd={addItem}
-            onTradeRemoved={(code) => setSelected((current) => current.filter((item) => item.tradeCode !== code))}
-            initialTradeCodes={existingQuote?.items.filter((item) => !item.system_generated).map((item) => item.trade_code) || []}
-          />
-        </div>
-
-        <div className="panel quote-summary">
-          <h2>Selected Items</h2>
-          {selected.length === 0 && <div className="empty">No line items selected yet.</div>}
-          {selected.map((item) => (
-            <div className="selected-line" key={item.priceItemId}>
-              <div><strong>{item.description}</strong><span>{item.tradeName} · {item.unit}</span></div>
-              <div className="selected-line-inputs">
-                <label>Qty<input required type="number" min="0.01" step="0.01" value={item.quantity} onChange={(e) => updateQty(item.priceItemId, e.target.value)} /></label>
-                {item.requiresRateInput && (
-                  <label>{item.pricingMode === 'manual' ? 'Calculated rate excl. VAT' : `Supplier cost excl. VAT${item.markupPercentage ? ` (+${item.markupPercentage}%)` : ''}`}
-                    <input required type="number" min="0" step="0.01" value={item.enteredRate} onChange={(e) => updateEnteredRate(item.priceItemId, e.target.value)} />
-                  </label>
-                )}
-              </div>
-              <button type="button" className="secondary" onClick={() => removeItem(item.priceItemId)}>Remove</button>
-            </div>
-          ))}
-          <label className="upload-box">
-            <Camera size={22} />
-            <span>{photos.length ? `${photos.length} photo(s) selected` : 'Upload site photos'}</span>
-            <input type="file" multiple accept="image/*" onChange={(e) => setPhotos([...e.target.files])} />
-          </label>
-          {message && <div className={message.includes('submitted') || message.includes('updated') ? 'success' : 'error'}>{message}</div>}
-          <button className="primary"><Send size={18} />{existingQuote ? "Save Quote" : "Submit Quote"}</button>
-        </div>
+      <form className="quote-wizard-form" onSubmit={submit}>
+        {step === 1 && <TradeSelectionStep tradeGroups={tradeGroups} selectedTradeCodes={selectedTradeCodes} onToggle={toggleTrade} onContinue={openLineItems} />}
+        {step === 2 && <LineItemSelectionStep
+          trades={trades}
+          selectedTradeCodes={selectedTradeCodes}
+          activeTrade={activeTrade}
+          onActiveTrade={setActiveTrade}
+          items={catalogItems}
+          search={catalogSearch}
+          onSearch={setCatalogSearch}
+          category={catalogCategory}
+          onCategory={setCatalogCategory}
+          selected={selected}
+          canReview={canReview}
+          onAdd={addItem}
+          onQuantity={updateQty}
+          onRate={updateEnteredRate}
+          onRemove={removeItem}
+          onBack={() => setStep(1)}
+          onReview={openReview}
+        />}
+        {step === 3 && <QuoteReviewStep
+          selected={selected}
+          photos={photos}
+          existingPhotoCount={existingQuote?.photo_count || 0}
+          onPhotos={(files) => setPhotos((current) => [...current, ...files].slice(0, Math.max(0, 50 - (existingQuote?.photo_count || 0))))}
+          onRemovePhoto={(index) => setPhotos((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+          onBack={() => setStep(2)}
+          message={message}
+          submitting={submitting}
+          isEditing={Boolean(existingQuote)}
+        />}
       </form>
     </section>
   );
@@ -1012,13 +1376,12 @@ function DateTimePicker({ label, value, onChange, required = false }) {
     </div>
   );
 }
-function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
+function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote, onEditQuote }) {
   const [quotes, setQuotes] = useState([]);
   const [active, setActive] = useState(null);
   const [query, setQuery] = useState('');
   const [assessors, setAssessors] = useState([]);
   const [assessorId, setAssessorId] = useState('all');
-  const [editing, setEditing] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(null);
   const [downloadMessage, setDownloadMessage] = useState('');
   const [erpQuoteNumber, setErpQuoteNumber] = useState('');
@@ -1108,7 +1471,6 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
   }
 
   async function openQuote(id) {
-    setEditing(false);
     setPhotoIndex(null);
     setDownloadMessage('');
     const quote = await api.quote(id);
@@ -1120,7 +1482,6 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
 
   function closeQuote() {
     setActive(null);
-    setEditing(false);
     setPhotoIndex(null);
     setDownloadMessage('');
     setErpQuoteNumber('');
@@ -1132,10 +1493,7 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
     return (
       <div className={fullScreen ? 'panel detail-panel quote-detail-screen' : 'panel detail-panel'}>
         {!active && <div className="empty">Select a quote to view details.</div>}
-        {active && editing && canEditQuote && (
-          <QuoteEditor api={api} quote={active} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await refreshQuote(active.id); }} />
-        )}
-        {active && !editing && (
+        {active && (
           <>
             {fullScreen && <button type="button" className="secondary back-button" onClick={closeQuote}><ArrowLeft size={18} />Back to quotes</button>}
             <div className="detail-heading">
@@ -1150,12 +1508,12 @@ function QuotesView({ api, role, initialQuoteId, onOpenedInitialQuote }) {
               </div>
               <div className="detail-actions">
                 {isQuoteAdministrator && active.status === 'submitted' && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
-                {canEditQuote && active.status === 'submitted' && <button className="secondary" onClick={() => setEditing(true)}>Edit quote</button>}
+                {canEditQuote && active.status === 'submitted' && <button className="secondary" onClick={() => onEditQuote(active)}>Edit quote</button>}
               </div>
             </div>
             <div className="line-table">
               {active.items.map((item) => (
-                <div key={item.id}><span>{item.description}{item.system_generated && <em className="system-fee-badge">Automatic 2026 fee</em>}</span><span>{item.quantity} {item.unit}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+                <div key={item.id}><span>{item.description}{item.system_generated && <em className="system-fee-badge">Automatic 2026 fee</em>}</span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
               ))}
             </div>
             {canReviewQuotes && <h3>Reference total: R {active.subtotal.toFixed(2)}</h3>}
@@ -1389,7 +1747,7 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
     tradeName: item.trade_name,
     category: item.category,
     description: item.description,
-    unit: item.unit,
+    unit: normalizeQuoteUnit(item.unit),
     quantity: item.quantity,
     enteredRate: item.input_amount ?? '',
     requiresRateInput: item.input_amount !== null
@@ -1404,7 +1762,7 @@ function QuoteEditor({ api, quote, onCancel, onSaved }) {
         tradeName: item.trade_name,
         category: item.category,
         description: item.description,
-        unit: item.unit,
+        unit: normalizeQuoteUnit(item.unit),
         quantity: 1,
         enteredRate: '',
         requiresRateInput: item.requires_rate_input,
