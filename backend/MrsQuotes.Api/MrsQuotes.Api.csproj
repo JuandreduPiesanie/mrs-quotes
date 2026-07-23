@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <None Update="SeedData/clients.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="SeedData/outsurance-rates-2026.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

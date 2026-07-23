@@ -11,7 +11,9 @@ public sealed class QuotePayload
 public sealed class QuoteItemInput
 {
     public int PriceItemId { get; set; }
+    public string Location { get; set; } = "";
     public decimal Quantity { get; set; }
+    public decimal? EnteredRate { get; set; }
 }
 
 public sealed class CompleteQuoteRequest
@@ -78,13 +80,23 @@ public sealed class QuoteItemDto
     public int Id { get; set; }
     [JsonPropertyName("price_item_id")]
     public int PriceItemId { get; set; }
+    [JsonPropertyName("trade_code")]
+    public string TradeCode { get; set; } = "";
+    [JsonPropertyName("trade_name")]
+    public string TradeName { get; set; } = "";
+    public string Location { get; set; } = "";
+    public string Category { get; set; } = "";
     public string Description { get; set; } = "";
     public string Unit { get; set; } = "";
     public decimal Quantity { get; set; }
+    [JsonPropertyName("input_amount")]
+    public decimal? InputAmount { get; set; }
     [JsonPropertyName("unit_rate")]
     public decimal UnitRate { get; set; }
     [JsonPropertyName("line_total")]
     public decimal LineTotal { get; set; }
+    [JsonPropertyName("system_generated")]
+    public bool SystemGenerated { get; set; }
 }
 
 public sealed class QuotePhotoDto

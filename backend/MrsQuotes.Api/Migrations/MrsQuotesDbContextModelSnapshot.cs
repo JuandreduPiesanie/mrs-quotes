@@ -114,6 +114,10 @@ namespace MrsQuotes.Api.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("bit");
 
+                    b.Property<string>("AutomaticFeeCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -131,6 +135,18 @@ namespace MrsQuotes.Api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<decimal?>("MarkupPercentage")
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<string>("PricingMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("PricingNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<string>("QuoteGroup")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -139,14 +155,38 @@ namespace MrsQuotes.Api.Migrations
                     b.Property<decimal>("Rate")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int>("ScheduleVersion")
+                        .HasColumnType("int");
+
                     b.Property<string>("Section")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
                     b.Property<string>("SourceSheet")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("SystemGenerated")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("TradeCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TradeGroup")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("TradeName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.Property<string>("Unit")
                         .IsRequired()
@@ -155,7 +195,11 @@ namespace MrsQuotes.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Active", "QuoteGroup");
+                    b.HasIndex("ItemCode")
+                        .IsUnique()
+                        .HasFilter("[ItemCode] IS NOT NULL");
+
+                    b.HasIndex("Active", "ScheduleVersion", "TradeCode");
 
                     b.ToTable("PriceItems");
 
@@ -168,10 +212,17 @@ namespace MrsQuotes.Api.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Initial site inspection and quick make-safe allowance",
                             ItemCode = "MRS-001",
+                            PricingMode = "fixed",
                             QuoteGroup = "Emergency",
                             Rate = 850m,
+                            ScheduleVersion = 0,
                             Section = "Starter",
+                            SortOrder = 0,
                             SourceSheet = "Starter",
+                            SystemGenerated = false,
+                            TradeCode = "",
+                            TradeGroup = "",
+                            TradeName = "",
                             Unit = "Each"
                         },
                         new
@@ -182,10 +233,17 @@ namespace MrsQuotes.Api.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Replace damaged ceiling board",
                             ItemCode = "MRS-002",
+                            PricingMode = "fixed",
                             QuoteGroup = "Building",
                             Rate = 420m,
+                            ScheduleVersion = 0,
                             Section = "Starter",
+                            SortOrder = 0,
                             SourceSheet = "Starter",
+                            SystemGenerated = false,
+                            TradeCode = "",
+                            TradeGroup = "",
+                            TradeName = "",
                             Unit = "m2"
                         },
                         new
@@ -196,10 +254,17 @@ namespace MrsQuotes.Api.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Prepare and paint interior wall",
                             ItemCode = "MRS-003",
+                            PricingMode = "fixed",
                             QuoteGroup = "Building",
                             Rate = 95m,
+                            ScheduleVersion = 0,
                             Section = "Starter",
+                            SortOrder = 0,
                             SourceSheet = "Starter",
+                            SystemGenerated = false,
+                            TradeCode = "",
+                            TradeGroup = "",
+                            TradeName = "",
                             Unit = "m2"
                         },
                         new
@@ -210,10 +275,17 @@ namespace MrsQuotes.Api.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Torch-on waterproofing repair",
                             ItemCode = "MRS-004",
+                            PricingMode = "fixed",
                             QuoteGroup = "Roofing",
                             Rate = 310m,
+                            ScheduleVersion = 0,
                             Section = "Starter",
+                            SortOrder = 0,
                             SourceSheet = "Starter",
+                            SystemGenerated = false,
+                            TradeCode = "",
+                            TradeGroup = "",
+                            TradeName = "",
                             Unit = "m2"
                         },
                         new
@@ -224,10 +296,17 @@ namespace MrsQuotes.Api.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Post-repair cleaning crew",
                             ItemCode = "MRS-005",
+                            PricingMode = "fixed",
                             QuoteGroup = "Building",
                             Rate = 280m,
+                            ScheduleVersion = 0,
                             Section = "Starter",
+                            SortOrder = 0,
                             SourceSheet = "Starter",
+                            SystemGenerated = false,
+                            TradeCode = "",
+                            TradeGroup = "",
+                            TradeName = "",
                             Unit = "Hour"
                         });
                 });
@@ -331,13 +410,26 @@ namespace MrsQuotes.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<decimal?>("InputAmount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("LineTotal")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<int>("PriceItemId")
                         .HasColumnType("int");
@@ -347,6 +439,19 @@ namespace MrsQuotes.Api.Migrations
 
                     b.Property<int>("QuoteId")
                         .HasColumnType("int");
+
+                    b.Property<bool>("SystemGenerated")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("TradeCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TradeName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.Property<string>("Unit")
                         .IsRequired()

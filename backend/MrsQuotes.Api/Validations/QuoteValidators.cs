@@ -12,7 +12,9 @@ public sealed class QuotePayloadValidator : AbstractValidator<QuotePayload>
         RuleForEach(x => x.Items).ChildRules(item =>
         {
             item.RuleFor(x => x.PriceItemId).GreaterThan(0);
+            item.RuleFor(x => x.Location).NotEmpty().MaximumLength(200);
             item.RuleFor(x => x.Quantity).GreaterThan(0);
+            item.RuleFor(x => x.EnteredRate).GreaterThanOrEqualTo(0).When(x => x.EnteredRate.HasValue);
         });
     }
 }

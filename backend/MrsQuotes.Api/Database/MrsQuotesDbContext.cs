@@ -38,14 +38,22 @@ public sealed class MrsQuotesDbContext(DbContextOptions<MrsQuotesDbContext> opti
 
         modelBuilder.Entity<PriceItem>(entity =>
         {
-            entity.HasIndex(x => new { x.Active, x.QuoteGroup });
+            entity.HasIndex(x => new { x.Active, x.ScheduleVersion, x.TradeCode });
+            entity.HasIndex(x => x.ItemCode).IsUnique().HasFilter("[ItemCode] IS NOT NULL");
             entity.Property(x => x.Section).HasMaxLength(150);
             entity.Property(x => x.Category).HasMaxLength(150);
             entity.Property(x => x.QuoteGroup).HasMaxLength(150);
+            entity.Property(x => x.TradeCode).HasMaxLength(100);
+            entity.Property(x => x.TradeName).HasMaxLength(150);
+            entity.Property(x => x.TradeGroup).HasMaxLength(150);
             entity.Property(x => x.ItemCode).HasMaxLength(100);
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.Unit).HasMaxLength(80);
             entity.Property(x => x.Rate).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.PricingMode).HasMaxLength(30);
+            entity.Property(x => x.MarkupPercentage).HasColumnType("decimal(8,2)");
+            entity.Property(x => x.PricingNote).HasMaxLength(1000);
+            entity.Property(x => x.AutomaticFeeCode).HasMaxLength(100);
             entity.Property(x => x.SourceSheet).HasMaxLength(200);
         });
 
@@ -87,9 +95,14 @@ public sealed class MrsQuotesDbContext(DbContextOptions<MrsQuotesDbContext> opti
 
         modelBuilder.Entity<QuoteItem>(entity =>
         {
+            entity.Property(x => x.TradeCode).HasMaxLength(100);
+            entity.Property(x => x.TradeName).HasMaxLength(150);
+            entity.Property(x => x.Location).HasMaxLength(200);
+            entity.Property(x => x.Category).HasMaxLength(150);
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.Unit).HasMaxLength(80);
             entity.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
+            entity.Property(x => x.InputAmount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.UnitRate).HasColumnType("decimal(18,2)");
             entity.Property(x => x.LineTotal).HasColumnType("decimal(18,2)");
             entity.HasOne(x => x.Quote).WithMany(x => x.Items)
