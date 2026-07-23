@@ -1,48 +1,70 @@
 services:
-  db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: mrs-quotes-db
-    environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "${MSSQL_PID:-Express}"
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
-    volumes:
-      - mrs-quotes-sql-data:/var/opt/mssql
+  web:
+    image: "${WEB_IMAGE:?WEB_IMAGE is required}"
+    container_name: mrs-quotes-web
+    pull_policy: always
     restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - "80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mrs-quotes-web.rule=Host(`${QUOTE_HOST:?QUOTE_HOST is required}`)"
+      - "traefik.http.routers.mrs-quotes-web.entrypoints=web"
+      - "traefik.http.routers.mrs-quotes-web.service=mrs-quotes-web"
+      - "traefik.http.routers.mrs-quotes-web-secure.rule=Host(`${QUOTE_HOST:?QUOTE_HOST is required}`)"
+      - "traefik.http.routers.mrs-quotes-web-secure.entrypoints=websecure"
+      - "traefik.http.routers.mrs-quotes-web-secure.tls=true"
+      - "traefik.http.routers.mrs-quotes-web-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mrs-quotes-web-secure.service=mrs-quotes-web"
+      - "traefik.http.services.mrs-quotes-web.loadbalancer.server.port=80"
 
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: "${API_IMAGE:?API_IMAGE is required}"
     container_name: mrs-quotes-api
+    pull_policy: always
+    restart: unless-stopped
     depends_on:
       - db
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Database: "Server=db,1433;Database=${MSSQL_DATABASE:-MrsQuotes};User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
-      Authentication__JwtSigningKey: "${JWT_SIGNING_KEY}"
-      Authentication__Issuer: "${JWT_ISSUER:-mrs-quotes-api}"
-      Authentication__Audience: "${JWT_AUDIENCE:-mrs-quotes-web}"
-      Cors__AllowedOrigins__0: "${APP_ORIGIN:-http://localhost:8080}"
+      ASPNETCORE_URLS: http://+:8080
+      Application__UseHttpsRedirection: "false"
+      ConnectionStrings__Database: "Server=db,1433;Database=${MSSQL_DATABASE:-MrsQuotes};User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=true"
+      Authentication__JwtSigningKey: "${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}"
+      Authentication__Issuer: "${JWT_ISSUER:?JWT_ISSUER is required}"
+      Authentication__Audience: "${JWT_AUDIENCE:?JWT_AUDIENCE is required}"
+      Cors__AllowedOrigins__0: "${APP_ORIGIN:?APP_ORIGIN is required}"
       Storage__UploadsPath: /app/uploads
     volumes:
       - mrs-quotes-uploads:/app/uploads
-    ports:
-      - "${API_PORT:-4000}:8080"
-    restart: unless-stopped
+    expose:
+      - "8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mrs-quotes-api.rule=Host(`${API_HOST:?API_HOST is required}`)"
+      - "traefik.http.routers.mrs-quotes-api.entrypoints=web"
+      - "traefik.http.routers.mrs-quotes-api.service=mrs-quotes-api"
+      - "traefik.http.routers.mrs-quotes-api-secure.rule=Host(`${API_HOST:?API_HOST is required}`)"
+      - "traefik.http.routers.mrs-quotes-api-secure.entrypoints=websecure"
+      - "traefik.http.routers.mrs-quotes-api-secure.tls=true"
+      - "traefik.http.routers.mrs-quotes-api-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mrs-quotes-api-secure.service=mrs-quotes-api"
+      - "traefik.http.services.mrs-quotes-api.loadbalancer.server.port=8080"
 
-  web:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: /api
-    container_name: mrs-quotes-web
-    depends_on:
-      - api
-    ports:
-      - "${WEB_PORT:-8080}:80"
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mrs-quotes-db
     restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "${MSSQL_PID:-Express}"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required}"
+    volumes:
+      - mrs-quotes-sql-data:/var/opt/mssql
+    expose:
+      - "1433"
 
 volumes:
   mrs-quotes-sql-data:

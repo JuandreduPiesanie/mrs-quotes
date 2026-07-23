@@ -1,53 +1,157 @@
 # MRS Quotes deployment
 
-## Docker deployment
+MRS Quotes is deployed to the existing Hostinger Docker VPS through GitHub Actions. The deployment follows the same working pattern as Ladacom Supplies:
 
-Copy .env.example to .env and replace the SQL password and JWT signing key. The JWT key must be a long random secret and must not be committed.
+- GitHub Actions builds the frontend and API images.
+- Images are pushed to GitHub Container Registry (GHCR).
+- The workflow sends the production `docker-compose.yml` and environment values to Hostinger Docker Manager.
+- The existing `traefik-jpfn` project terminates HTTPS and routes both public hostnames.
+- SQL Server and uploaded quote photos use persistent Docker volumes.
 
-    Copy-Item .env.example .env
-    docker compose config
-    docker compose up -d --build
+## Production endpoints
 
-The stack contains:
+```text
+Frontend: https://quote.maintenancerisksolutions.co.za
+API:      https://api.maintenancerisksolutions.co.za
+Health:   https://api.maintenancerisksolutions.co.za/api/health
+```
 
-- mrs-quotes-web: Nginx serving the React PWA and proxying API and upload traffic.
-- mrs-quotes-api: .NET 10 Minimal API; applies EF migrations on startup.
-- mrs-quotes-db: SQL Server 2022 with persistent database storage.
+Both DNS records must point to the Hostinger VPS address `148.230.115.120`.
+
+## Production containers
+
+- `mrs-quotes-web`: Nginx serving the React PWA.
+- `mrs-quotes-api`: .NET 10 API; applies Entity Framework migrations during startup.
+- `mrs-quotes-db`: SQL Server 2022 Express.
+
+The application containers use `expose`, not public host-port mappings. Traefik is the only service that owns public ports 80 and 443. The database has no Traefik labels and is not publicly accessible.
 
 Persistent volumes:
 
-- mrs-quotes-sql-data stores SQL Server data.
-- mrs-quotes-uploads stores quote photos.
+- `mrs-quotes-sql-data`: SQL Server data.
+- `mrs-quotes-uploads`: uploaded quote photographs and generated archives.
 
-The uploads volume is temporary working storage for outstanding quotes. Completing a quote requires an ERP quote number, a OneDrive or SharePoint photo-folder URL, and confirmation that every photo was verified in that folder. The API saves the archive reference, retains local recovery copies for 48 hours, and then removes the completed quote's local photo files and photo rows. Completed quote records remain available through the Completed Quotes view.
+## GitHub Actions configuration
 
-The API retries database migrations for about one minute while SQL Server starts. Check startup with:
+The deployment workflow is `.github/workflows/deploy.yml`. It runs automatically after a push to `main` and can also be started manually from the Actions tab.
 
-    docker compose logs -f api
+Create a GitHub environment named `production` in:
 
-## HTTPS
+```text
+Settings > Environments
+```
 
-PWA installation and service workers require HTTPS outside localhost. Put the web container behind a TLS reverse proxy such as Traefik, Caddy, or Nginx and set APP_ORIGIN to the public HTTPS frontend origin. The browser normally needs only the web origin because Nginx proxies the API.
+Create these repository secrets in:
 
-Back up both Docker volumes. Database backups do not include uploaded photos.
+```text
+Settings > Secrets and variables > Actions > Secrets
+```
 
-## Install on a tablet
+| Secret | Purpose |
+|---|---|
+| `HOSTINGER_API_KEY` | Authorizes deployment through the Hostinger VPS API. |
+| `MSSQL_SA_PASSWORD` | Production SQL Server `sa` password. |
+| `JWT_SIGNING_KEY` | Random JWT signing key of at least 32 characters. |
 
-After deploying over HTTPS:
+The secrets configured in the Ladacom repository are normally repository-scoped and must be added to `mrs-quotes` as well.
 
-- Android with Chrome: open the site, choose Install app or Add to Home screen.
-- iPad with Safari: open the site, tap Share, then Add to Home Screen.
+Create these repository variables in:
 
-The installed app opens in standalone mode. Its shell can load after a prior visit without a connection, but login, calendars, submissions, and quote data still require access to the API.
+```text
+Settings > Secrets and variables > Actions > Variables
+```
 
-## First login
+| Variable | Value |
+|---|---|
+| `HOSTINGER_VM_ID` | `1745253` |
+| `QUOTE_HOST` | `quote.maintenancerisksolutions.co.za` |
+| `API_HOST` | `api.maintenancerisksolutions.co.za` |
+| `VITE_API_URL` | `https://api.maintenancerisksolutions.co.za` |
+| `APP_ORIGIN` | `https://quote.maintenancerisksolutions.co.za` |
+| `MSSQL_DATABASE` | `MrsQuotes` |
+| `MSSQL_PID` | `Express` |
+| `JWT_ISSUER` | `https://api.maintenancerisksolutions.co.za` |
+| `JWT_AUDIENCE` | `https://api.maintenancerisksolutions.co.za` |
 
-On a new database, open the login page and choose the first-time setup option. Create the initial Admin account, then register other users and assign assessors to Quote Administrators from the Admin or Management screens.
+`WEB_IMAGE` and `API_IMAGE` are generated by the workflow. They do not need to be configured as GitHub variables.
 
-## Validation before deployment
+## GHCR access
 
-    dotnet build backend\MrsQuotes.slnx
-    npm run build --prefix frontend
-    docker compose --env-file .env.example config --quiet
+The workflow publishes these packages:
 
-Integration tests are present in backend\MrsQuotes.IntegrationTests. Their JWT test-host fixture is currently deferred and should be repaired before relying on automated deployment gates.
+```text
+ghcr.io/juandredupiesanie/mrs-quotes-web
+ghcr.io/juandredupiesanie/mrs-quotes-api
+```
+
+Hostinger must be allowed to pull them. Use either of these approaches:
+
+- Make both GHCR packages public after their first successful build.
+- Add `ghcr.io` credentials in Hostinger Docker Manager using a GitHub personal access token with `read:packages`.
+
+The existing Ladacom GHCR credential may already cover the same GitHub account, but confirm it before the first MRS Quotes deployment.
+
+## First deployment
+
+1. Add the GitHub secrets and variables listed above.
+2. Confirm the two DNS records still resolve to `148.230.115.120`.
+3. Confirm Hostinger Docker Manager can pull packages from `ghcr.io/juandredupiesanie`.
+4. Commit and push the deployment files to `main`.
+5. Open the repository Actions tab and monitor `Deploy MRS Quotes`.
+6. In Hostinger Docker Manager, confirm the `mrs-quotes` project contains all three running containers.
+7. Test the frontend and API health endpoint over HTTPS.
+
+The Traefik router labels use the existing `web`, `websecure`, and `letsencrypt` names from the deployed Ladacom setup. MRS Quotes uses unique project, container, router, service, and volume names, so it does not replace Ladacom resources.
+
+## Validation before pushing
+
+From the repository root:
+
+```powershell
+dotnet build backend\MrsQuotes.slnx -c Release
+npm run build --prefix frontend
+docker compose --env-file .env.example config --quiet
+```
+
+The integration-test project remains deferred and is not a deployment gate.
+
+## Post-deployment checks
+
+```bash
+curl -I https://quote.maintenancerisksolutions.co.za
+curl https://api.maintenancerisksolutions.co.za/api/health
+```
+
+If HTTPS does not issue, inspect Traefik ACME logs:
+
+```bash
+docker logs traefik-jpfn-traefik-1 --tail 200
+```
+
+Check application logs in Hostinger Docker Manager or on the VPS:
+
+```bash
+docker logs mrs-quotes-api --tail 200
+docker logs mrs-quotes-web --tail 200
+docker logs mrs-quotes-db --tail 200
+```
+
+The API retries database migrations while SQL Server starts. A short delay before the health endpoint becomes available is expected on a first deployment.
+
+## Backups
+
+Back up both persistent volumes before destructive maintenance or major upgrades:
+
+- Create regular SQL Server `.bak` backups and copy them off the VPS.
+- Back up the `mrs-quotes-uploads` volume separately; database backups do not contain photo files.
+- Store the production environment secrets securely outside the VPS.
+- Use Hostinger VPS snapshots as an additional recovery layer, not as the only database backup.
+
+Do not delete the `mrs-quotes-sql-data` or `mrs-quotes-uploads` volumes during routine deployments.
+
+## Tablet installation
+
+The PWA requires HTTPS outside localhost.
+
+- Android/Chrome: open the frontend, then choose **Install app** or **Add to Home screen**.
+- iPad/Safari: open the frontend, tap **Share**, then choose **Add to Home Screen**.
