@@ -14,6 +14,10 @@ export interface FirstAdminRequestDto extends LoginRequestDto {
   name: string;
 }
 
+export interface SetupStatusDto {
+  setup_available: boolean;
+}
+
 export interface UserSessionDto {
   id: number;
   name: string;

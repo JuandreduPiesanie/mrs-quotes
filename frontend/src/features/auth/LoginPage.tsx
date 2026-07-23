@@ -1,16 +1,21 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import mrsLogo from '../../assets/mrs-logo.png';
-import { getApiErrorMessage, useLoginMutation, useSetupFirstAdminMutation } from '../../services/baseApi';
+import { getApiErrorMessage, useGetSetupStatusQuery, useLoginMutation, useSetupFirstAdminMutation } from '../../services/baseApi';
 import type { Session } from '../../services/sessionService';
 
 export function Login({ onLogin }: { onLogin: (session: Session) => void }) {
   const [login] = useLoginMutation();
   const [setupFirstAdmin] = useSetupFirstAdminMutation();
+  const { data: setupStatus } = useGetSetupStatusQuery(undefined, { pollingInterval: 30_000 });
   const [setupMode, setSetupMode] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (setupStatus && !setupStatus.setup_available) setSetupMode(false);
+  }, [setupStatus]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,9 +40,11 @@ export function Login({ onLogin }: { onLogin: (session: Session) => void }) {
         <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {error && <div className="error">{error}</div>}
         <button className="primary">{setupMode ? 'Create administrator' : 'Sign in'}</button>
-        <button className="secondary" type="button" onClick={() => { setSetupMode(!setupMode); setError(''); }}>
-          {setupMode ? 'Back to sign in' : 'First-time setup'}
-        </button>
+        {setupStatus?.setup_available && (
+          <button className="secondary" type="button" onClick={() => { setSetupMode(!setupMode); setError(''); }}>
+            {setupMode ? 'Back to sign in' : 'First-time setup'}
+          </button>
+        )}
       </form>
     </div>
   );

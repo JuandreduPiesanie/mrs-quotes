@@ -21,6 +21,8 @@ public static class EndpointMappingExtensions
         app.MapGet("/", () => Results.Ok(new { service = "MRS Quotes API", status = "ok" })).AllowAnonymous();
         app.MapGet("/api/health", () => Results.Ok(new { ok = true })).AllowAnonymous();
 
+        app.MapGet("/api/auth/setup-status", (AuthenticationHandler handler) => handler.GetSetupStatus())
+            .AllowAnonymous();
         app.MapPost("/api/auth/login", (AuthenticationHandler handler, LoginRequest request) => handler.Login(request))
             .AllowAnonymous().WithValidation<LoginRequest>();
         app.MapPost("/api/auth/setup", (AuthenticationHandler handler, FirstAdminRequest request) => handler.SetupFirstAdmin(request))

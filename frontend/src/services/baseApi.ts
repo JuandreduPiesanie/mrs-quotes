@@ -14,6 +14,7 @@ import type {
   QuoteCreatedDto,
   QuoteDto,
   QuoteStatus,
+  SetupStatusDto,
   UserDto,
   ValidationProblemDto
 } from './apiDtos';
@@ -34,6 +35,9 @@ export const baseApi = createApi({
   endpoints: (build) => ({
     login: build.mutation<AuthResultDto, LoginRequestDto>({
       query: (body) => ({ url: '/auth/login', method: 'POST', body })
+    }),
+    getSetupStatus: build.query<SetupStatusDto, void>({
+      query: () => '/auth/setup-status'
     }),
     setupFirstAdmin: build.mutation<AuthResultDto, FirstAdminRequestDto>({
       query: (body) => ({ url: '/auth/setup', method: 'POST', body })
@@ -117,6 +121,7 @@ export const baseApi = createApi({
 });
 
 export const {
+  useGetSetupStatusQuery,
   useLoginMutation,
   useSetupFirstAdminMutation,
   useGetTradesQuery,

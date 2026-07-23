@@ -14,6 +14,11 @@ namespace MrsQuotes.Api.Providers.Authentication;
 public sealed class AuthenticationProvider(MrsQuotesDbContext context, IConfiguration configuration)
     : IAuthenticationProvider
 {
+    public async Task<bool> IsInitialSetupAvailableAsync()
+    {
+        return !await context.Users.AnyAsync();
+    }
+
     public async Task<AuthResult> LoginAsync(LoginRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
@@ -28,7 +33,7 @@ public sealed class AuthenticationProvider(MrsQuotesDbContext context, IConfigur
 
     public async Task<AuthResult> SetupFirstAdminAsync(FirstAdminRequest request)
     {
-        if (await context.Users.AnyAsync())
+        if (!await IsInitialSetupAvailableAsync())
         {
             throw new InvalidOperationException("Initial setup has already been completed.");
         }
