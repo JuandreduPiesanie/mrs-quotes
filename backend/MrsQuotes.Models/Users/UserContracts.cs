@@ -10,6 +10,14 @@ public sealed class CreateUserRequest
     public string Role { get; set; } = "";
 }
 
+public sealed class UpdateUserRequest
+{
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string Role { get; set; } = "";
+}
+
 public sealed class AssignQuoteAdministratorRequest
 {
     public int? QuoteAdministratorId { get; set; }

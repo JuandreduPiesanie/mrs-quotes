@@ -6,6 +6,7 @@ public interface IUserProvider
 {
     Task<List<UserDto>> GetUsersAsync();
     Task<UserDto> CreateUserAsync(CreateUserRequest request);
+    Task<UserDto?> UpdateUserAsync(int userId, UpdateUserRequest request);
     Task<List<UserDto>> GetAssessorsAsync(int requestingUserId, string requestingRole);
     Task<List<UserDto>> GetQuoteAdministratorsAsync();
     Task<UserDto?> AssignQuoteAdministratorAsync(int assessorId, int? quoteAdministratorId);

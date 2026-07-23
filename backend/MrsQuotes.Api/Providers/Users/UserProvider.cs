@@ -34,6 +34,49 @@ public sealed class UserProvider(MrsQuotesDbContext context) : IUserProvider
         return await UserQuery().SingleAsync(x => x.Id == user.Id);
     }
 
+    public async Task<UserDto?> UpdateUserAsync(int userId, UpdateUserRequest request)
+    {
+        var user = await context.Users
+            .Include(x => x.AssignedAssessors)
+            .FirstOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return null;
+
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (await context.Users.AnyAsync(x => x.Id != userId && x.Email == email))
+        {
+            throw new InvalidOperationException("A user with this email address already exists.");
+        }
+
+        if (user.Role == RoleNames.Admin && request.Role != RoleNames.Admin &&
+            !await context.Users.AnyAsync(x => x.Id != userId && x.Role == RoleNames.Admin))
+        {
+            throw new InvalidOperationException("The final administrator account cannot be assigned another role.");
+        }
+
+        if (user.Role == RoleNames.QuoteAdministrator && request.Role != RoleNames.QuoteAdministrator)
+        {
+            foreach (var assessor in user.AssignedAssessors)
+            {
+                assessor.QuoteAdministratorId = null;
+            }
+        }
+
+        user.Name = request.Name.Trim();
+        user.Email = email;
+        user.Role = request.Role;
+        if (request.Role != RoleNames.Assessor)
+        {
+            user.QuoteAdministratorId = null;
+        }
+        if (!string.IsNullOrEmpty(request.Password))
+        {
+            user.PasswordHash = AuthenticationProvider.HashSecret(request.Password);
+        }
+
+        await context.SaveChangesAsync();
+        return await UserQuery().SingleAsync(x => x.Id == user.Id);
+    }
+
     public Task<List<UserDto>> GetAssessorsAsync(int requestingUserId, string requestingRole)
     {
         var query = UserQuery().Where(x => x.Role == RoleNames.Assessor);

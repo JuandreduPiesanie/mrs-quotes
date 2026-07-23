@@ -58,6 +58,7 @@ public static class DependencyInjectionSetup
         services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
         services.AddScoped<IValidator<FirstAdminRequest>, FirstAdminRequestValidator>();
         services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
+        services.AddScoped<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
         services.AddScoped<IValidator<CreateAppointmentRequest>, CreateAppointmentRequestValidator>();
         services.AddScoped<IValidator<QuotePayload>, QuotePayloadValidator>();
         services.AddScoped<IValidator<CompleteQuoteRequest>, CompleteQuoteRequestValidator>();

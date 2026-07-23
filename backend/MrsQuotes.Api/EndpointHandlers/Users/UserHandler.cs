@@ -15,6 +15,14 @@ public sealed class UserHandler(IUserProvider provider)
         return Results.Created($"/api/users/{user.Id}", user);
     }
 
+    public async Task<IResult> UpdateUser(int userId, UpdateUserRequest request)
+    {
+        var user = await provider.UpdateUserAsync(userId, request);
+        return user is null
+            ? Results.NotFound(new { error = "User not found." })
+            : Results.Ok(user);
+    }
+
     public async Task<IResult> GetAssessors(ClaimsPrincipal principal)
     {
         return Results.Ok(await provider.GetAssessorsAsync(principal.UserId(), principal.UserRole()));

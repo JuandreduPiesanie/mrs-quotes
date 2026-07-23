@@ -16,6 +16,7 @@ import type {
   QuoteStatus,
   SetupStatusDto,
   UserDto,
+  UpdateUserRequestDto,
   ValidationProblemDto
 } from './apiDtos';
 
@@ -85,6 +86,10 @@ export const baseApi = createApi({
       query: (body) => ({ url: '/users', method: 'POST', body }),
       invalidatesTags: ['Users']
     }),
+    updateUser: build.mutation<UserDto, UpdateUserRequestDto>({
+      query: ({ id, ...body }) => ({ url: `/users/${id}`, method: 'PUT', body }),
+      invalidatesTags: ['Users']
+    }),
     assignQuoteAdministrator: build.mutation<UserDto, AssignQuoteAdministratorRequestDto>({
       query: ({ assessorId, quoteAdministratorId }) => ({
         url: `/users/assessors/${assessorId}/quote-administrator`,
@@ -135,6 +140,7 @@ export const {
   useGetUsersQuery,
   useGetClientsQuery,
   useCreateUserMutation,
+  useUpdateUserMutation,
   useAssignQuoteAdministratorMutation,
   useCreateAppointmentMutation,
   useUpdateAppointmentMutation,

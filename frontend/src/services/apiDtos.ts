@@ -47,6 +47,14 @@ export interface CreateUserRequestDto {
   role: Role;
 }
 
+export interface UpdateUserRequestDto {
+  id: number;
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+}
+
 export interface AssignQuoteAdministratorRequestDto {
   assessorId: number;
   quoteAdministratorId: number | null;

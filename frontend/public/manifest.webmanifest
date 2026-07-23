@@ -1,13 +1,16 @@
 {
+  "id": "/",
   "name": "MRS Quotes",
   "short_name": "MRS Quotes",
   "description": "Schedule assessments and manage insurance repair quotes.",
+  "lang": "en-ZA",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f5f7fb",
   "theme_color": "#17243a",
   "orientation": "any",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/pwa-icon-192.png",

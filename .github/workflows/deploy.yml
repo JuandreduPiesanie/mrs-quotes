@@ -65,6 +65,11 @@ jobs:
             fi
           done
 
+          if [[ "${VITE_API_URL}" != */api ]]; then
+            echo "VITE_API_URL must end with /api (received: ${VITE_API_URL})"
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

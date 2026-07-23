@@ -42,6 +42,9 @@ public static class EndpointMappingExtensions
             .RequireAuthorization(PolicyNames.AdminOnly);
         app.MapPost("/api/users", (UserHandler handler, CreateUserRequest request) => handler.CreateUser(request))
             .RequireAuthorization(PolicyNames.AdminOnly).WithValidation<CreateUserRequest>();
+        app.MapPut("/api/users/{userId:int}", (UserHandler handler, int userId, UpdateUserRequest request) =>
+                handler.UpdateUser(userId, request))
+            .RequireAuthorization(PolicyNames.AdminOnly).WithValidation<UpdateUserRequest>();
         app.MapGet("/api/users/assessors", (UserHandler handler, ClaimsPrincipal principal) => handler.GetAssessors(principal))
             .RequireAuthorization(PolicyNames.AssessorDirectory);
         app.MapGet("/api/users/quote-administrators", (UserHandler handler) => handler.GetQuoteAdministrators())

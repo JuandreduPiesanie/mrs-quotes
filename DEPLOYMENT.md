@@ -66,7 +66,7 @@ Settings > Secrets and variables > Actions > Variables
 | `HOSTINGER_VM_ID` | `1745253` |
 | `QUOTE_HOST` | `quote.maintenancerisksolutions.co.za` |
 | `API_HOST` | `api.maintenancerisksolutions.co.za` |
-| `VITE_API_URL` | `https://api.maintenancerisksolutions.co.za` |
+| `VITE_API_URL` | `https://api.maintenancerisksolutions.co.za/api` |
 | `APP_ORIGIN` | `https://quote.maintenancerisksolutions.co.za` |
 | `MSSQL_DATABASE` | `MrsQuotes` |
 | `MSSQL_PID` | `Express` |
