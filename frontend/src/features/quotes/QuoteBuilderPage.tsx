@@ -506,7 +506,7 @@ export function QuoteBuilder({ appointment, quoteId, onDone }: QuoteBuilderProps
 
   return (
     <section className="workspace quote-wizard-workspace">
-      <div className="quote-wizard-title-row"><PageTitle title={existingQuote ? `Edit ${existingQuote.quote_number}` : 'Quick Estimate'} subtitle="A guided scope workflow for field assessors. Pricing stays hidden." /><span>OUTsurance 2026 rate schedule</span></div>
+      <div className="quote-wizard-title-row"><PageTitle title={existingQuote ? `Edit ${existingQuote.quote_number}` : 'Quick Estimate'} subtitle="A guided scope workflow for field assessors. Pricing stays hidden." /></div>
       <div className="panel quote-wizard-context">
         <div><span>Client</span><strong>{appointment.client_name || appointment.customer_name}</strong></div>
         <div><span>Site address</span><strong>{appointment.site_address}</strong></div>
