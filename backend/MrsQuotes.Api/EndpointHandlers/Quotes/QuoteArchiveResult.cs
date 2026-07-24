@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Microsoft.AspNetCore.Http.Features;
 using MrsQuotes.Api.Providers.Quotes;
 
 namespace MrsQuotes.Api.EndpointHandlers.Quotes;
@@ -7,6 +8,11 @@ public sealed class QuoteArchiveResult(QuoteArchive archive) : IResult
 {
     public async Task ExecuteAsync(HttpContext httpContext)
     {
+        // ZipArchive.Dispose() writes the central directory synchronously.
+        // Kestrel disallows sync writes by default, which truncates the ZIP.
+        var bodyControl = httpContext.Features.Get<IHttpBodyControlFeature>();
+        if (bodyControl is not null) bodyControl.AllowSynchronousIO = true;
+
         httpContext.Response.StatusCode = StatusCodes.Status200OK;
         httpContext.Response.ContentType = "application/zip";
         httpContext.Response.Headers.ContentDisposition = "attachment; filename=" + archive.FileName;
