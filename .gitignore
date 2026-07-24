@@ -13,3 +13,7 @@ TestResults/
 artifacts/
 *.user
 *.suo
+
+# graphify — commit graph.json, GRAPH_REPORT.md, graph.html; exclude local-only files
+graphify-out/cost.json
+graphify-out/cache/

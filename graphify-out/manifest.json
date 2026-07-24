@@ -1,0 +1,587 @@
+{
+  "backend/MrsQuotes.Api/Database/DatabaseInitializer.cs": {
+    "mtime": 1784836622.6741884,
+    "ast_hash": "ff2bf6c090521a37de24641a6bc7af02",
+    "semantic_hash": "ff2bf6c090521a37de24641a6bc7af02"
+  },
+  "backend/MrsQuotes.Api/Database/Models/Appointment.cs": {
+    "mtime": 1784494767.6372182,
+    "ast_hash": "327c5103ca9f40d9e686aae6e112f1f4",
+    "semantic_hash": "327c5103ca9f40d9e686aae6e112f1f4"
+  },
+  "backend/MrsQuotes.Api/Database/Models/Client.cs": {
+    "mtime": 1784494767.634217,
+    "ast_hash": "bf227d8c8f4eedb0b28ceefba7e8a162",
+    "semantic_hash": "bf227d8c8f4eedb0b28ceefba7e8a162"
+  },
+  "backend/MrsQuotes.Api/Database/Models/PriceItem.cs": {
+    "mtime": 1784836622.6751893,
+    "ast_hash": "8a897a0c41578ba7e105600765f7f7b8",
+    "semantic_hash": "8a897a0c41578ba7e105600765f7f7b8"
+  },
+  "backend/MrsQuotes.Api/Database/Models/Quote.cs": {
+    "mtime": 1784572785.538146,
+    "ast_hash": "e710892b068bfaa4b34d481b267f1357",
+    "semantic_hash": "e710892b068bfaa4b34d481b267f1357"
+  },
+  "backend/MrsQuotes.Api/Database/Models/QuoteItem.cs": {
+    "mtime": 1784836622.6781907,
+    "ast_hash": "7188aafec25bce0a5a8e10f6eaaa814a",
+    "semantic_hash": "7188aafec25bce0a5a8e10f6eaaa814a"
+  },
+  "backend/MrsQuotes.Api/Database/Models/QuotePhoto.cs": {
+    "mtime": 1784494767.640723,
+    "ast_hash": "ed4b23636f03f66ce0f9f57edda6df66",
+    "semantic_hash": "ed4b23636f03f66ce0f9f57edda6df66"
+  },
+  "backend/MrsQuotes.Api/Database/Models/User.cs": {
+    "mtime": 1784494767.634217,
+    "ast_hash": "12b015ab66e280cbe462f873a3bf06c6",
+    "semantic_hash": "12b015ab66e280cbe462f873a3bf06c6"
+  },
+  "backend/MrsQuotes.Api/Database/MrsQuotesDbContext.cs": {
+    "mtime": 1784836622.6801882,
+    "ast_hash": "b994d45fcebc68d068365adc54d9028c",
+    "semantic_hash": "b994d45fcebc68d068365adc54d9028c"
+  },
+  "backend/MrsQuotes.Api/EndpointHandlers/Appointments/AppointmentHandler.cs": {
+    "mtime": 1784575008.5560048,
+    "ast_hash": "ca54136fa0271a531994b72f1b8d9415",
+    "semantic_hash": "ca54136fa0271a531994b72f1b8d9415"
+  },
+  "backend/MrsQuotes.Api/EndpointHandlers/Authentication/AuthenticationHandler.cs": {
+    "mtime": 1784836635.041368,
+    "ast_hash": "c933686d235ad03833cfceeb593b8c7b",
+    "semantic_hash": "c933686d235ad03833cfceeb593b8c7b"
+  },
+  "backend/MrsQuotes.Api/EndpointHandlers/Clients/ClientHandler.cs": {
+    "mtime": 1784494936.7865317,
+    "ast_hash": "97ac8fe50d85ab1498d73e252f90b2d3",
+    "semantic_hash": "97ac8fe50d85ab1498d73e252f90b2d3"
+  },
+  "backend/MrsQuotes.Api/EndpointHandlers/Pricing/PricingHandler.cs": {
+    "mtime": 1784836622.6811903,
+    "ast_hash": "04a65b877b9939f6d9a2b0e854907a6c",
+    "semantic_hash": "04a65b877b9939f6d9a2b0e854907a6c"
+  },
+  "backend/MrsQuotes.Api/EndpointHandlers/Quotes/QuoteArchiveResult.cs": {
+    "mtime": 1784572908.8824685,
+    "ast_hash": "66cd7613c3ddbef1ea7914be908020db",
+    "semantic_hash": "66cd7613c3ddbef1ea7914be908020db"
+  },
+  "backend/MrsQuotes.Api/EndpointHandlers/Quotes/QuoteHandler.cs": {
+    "mtime": 1784575216.2999425,
+    "ast_hash": "a7698ca8ee63ed7fb317824c9a64c4a2",
+    "semantic_hash": "a7698ca8ee63ed7fb317824c9a64c4a2"
+  },
+  "backend/MrsQuotes.Api/EndpointHandlers/Users/UserHandler.cs": {
+    "mtime": 1784840700.193677,
+    "ast_hash": "eb967946cd7fba60d2a3ff10196262be",
+    "semantic_hash": "eb967946cd7fba60d2a3ff10196262be"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260719211356_InitialCreate.Designer.cs": {
+    "mtime": 1784495636.530804,
+    "ast_hash": "11704c9857ca0448ce1844b5cf78918a",
+    "semantic_hash": "11704c9857ca0448ce1844b5cf78918a"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260719211356_InitialCreate.cs": {
+    "mtime": 1784495636.5298026,
+    "ast_hash": "b37ce5a699f675b0fc12e3b4b576c88d",
+    "semantic_hash": "b37ce5a699f675b0fc12e3b4b576c88d"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260720171915_AddQuotePhotoArchive.Designer.cs": {
+    "mtime": 1784567955.926214,
+    "ast_hash": "9c22f8fb310a9b092b05a3d933718b0d",
+    "semantic_hash": "9c22f8fb310a9b092b05a3d933718b0d"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260720171915_AddQuotePhotoArchive.cs": {
+    "mtime": 1784567955.9242098,
+    "ast_hash": "c7366da23e39e4d66ba903938318e529",
+    "semantic_hash": "c7366da23e39e4d66ba903938318e529"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260720184543_PreserveQuoteAdministratorAndDelayPhotoPurge.Designer.cs": {
+    "mtime": 1784573143.4707286,
+    "ast_hash": "8d22ce0db2e0bac78780d7625f0fcabf",
+    "semantic_hash": "8d22ce0db2e0bac78780d7625f0fcabf"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260720184543_PreserveQuoteAdministratorAndDelayPhotoPurge.cs": {
+    "mtime": 1784573167.261209,
+    "ast_hash": "a57bd457da6dfb9b1f4cb3edb5659f25",
+    "semantic_hash": "a57bd457da6dfb9b1f4cb3edb5659f25"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260721221813_AddOutsurance2026RateSchedule.Designer.cs": {
+    "mtime": 1784836622.68219,
+    "ast_hash": "082648c80e8aa8e8b876d6a7fdf64620",
+    "semantic_hash": "082648c80e8aa8e8b876d6a7fdf64620"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260721221813_AddOutsurance2026RateSchedule.cs": {
+    "mtime": 1784836622.6841893,
+    "ast_hash": "1c9d38696a9bce31f1d6433120e82dc4",
+    "semantic_hash": "1c9d38696a9bce31f1d6433120e82dc4"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260723191842_AddQuoteItemLocations.Designer.cs": {
+    "mtime": 1784836622.6851912,
+    "ast_hash": "b2c7da891dc72bd811ba136f73170ec7",
+    "semantic_hash": "b2c7da891dc72bd811ba136f73170ec7"
+  },
+  "backend/MrsQuotes.Api/Migrations/20260723191842_AddQuoteItemLocations.cs": {
+    "mtime": 1784836622.686191,
+    "ast_hash": "9b92acf04a358bcad275995fa7d9e21f",
+    "semantic_hash": "9b92acf04a358bcad275995fa7d9e21f"
+  },
+  "backend/MrsQuotes.Api/Migrations/MrsQuotesDbContextModelSnapshot.cs": {
+    "mtime": 1784836622.68819,
+    "ast_hash": "9b01ef8349139e1a9f0ef49c6836a22d",
+    "semantic_hash": "9b01ef8349139e1a9f0ef49c6836a22d"
+  },
+  "backend/MrsQuotes.Api/MrsQuotes.Api.csproj": {
+    "mtime": 1784836622.6891904,
+    "ast_hash": "d43a348771167d5f6b61ca4281d72674",
+    "semantic_hash": "d43a348771167d5f6b61ca4281d72674"
+  },
+  "backend/MrsQuotes.Api/Program.cs": {
+    "mtime": 1784569273.9424505,
+    "ast_hash": "172e42f84ba70c5af40a6fee72af8a23",
+    "semantic_hash": "172e42f84ba70c5af40a6fee72af8a23"
+  },
+  "backend/MrsQuotes.Api/Properties/launchSettings.json": {
+    "mtime": 1784495208.3620389,
+    "ast_hash": "4985581ca2550e00277dca649013ad18",
+    "semantic_hash": "4985581ca2550e00277dca649013ad18"
+  },
+  "backend/MrsQuotes.Api/Providers/Appointments/AppointmentProvider.cs": {
+    "mtime": 1784575008.561004,
+    "ast_hash": "72fc1012b5578c06f2e32e3a5df40e6a",
+    "semantic_hash": "72fc1012b5578c06f2e32e3a5df40e6a"
+  },
+  "backend/MrsQuotes.Api/Providers/Appointments/IAppointmentProvider.cs": {
+    "mtime": 1784575008.5550025,
+    "ast_hash": "3e48a99ec43322ce8ba0b6c75dd532a1",
+    "semantic_hash": "3e48a99ec43322ce8ba0b6c75dd532a1"
+  },
+  "backend/MrsQuotes.Api/Providers/Authentication/AuthenticationProvider.cs": {
+    "mtime": 1784836635.0433693,
+    "ast_hash": "5cd400d94c1ed5357c11f2de0c2bb6be",
+    "semantic_hash": "5cd400d94c1ed5357c11f2de0c2bb6be"
+  },
+  "backend/MrsQuotes.Api/Providers/Authentication/IAuthenticationProvider.cs": {
+    "mtime": 1784836635.0443687,
+    "ast_hash": "582733d220245df1d152d3c8e642eff4",
+    "semantic_hash": "582733d220245df1d152d3c8e642eff4"
+  },
+  "backend/MrsQuotes.Api/Providers/Clients/ClientProvider.cs": {
+    "mtime": 1784494936.785532,
+    "ast_hash": "522dd1cc73dbe95035ea1e3244cd062a",
+    "semantic_hash": "522dd1cc73dbe95035ea1e3244cd062a"
+  },
+  "backend/MrsQuotes.Api/Providers/Clients/IClientProvider.cs": {
+    "mtime": 1784494936.7845318,
+    "ast_hash": "20e35577cf15661ba3c831f4d4ad6240",
+    "semantic_hash": "20e35577cf15661ba3c831f4d4ad6240"
+  },
+  "backend/MrsQuotes.Api/Providers/Pricing/IPricingProvider.cs": {
+    "mtime": 1784836622.69019,
+    "ast_hash": "1dbd0ef4eecac9e6aea8cf6694470317",
+    "semantic_hash": "1dbd0ef4eecac9e6aea8cf6694470317"
+  },
+  "backend/MrsQuotes.Api/Providers/Pricing/PricingProvider.cs": {
+    "mtime": 1784836622.7011912,
+    "ast_hash": "13034bec644d7701f6453a154fa7fc88",
+    "semantic_hash": "13034bec644d7701f6453a154fa7fc88"
+  },
+  "backend/MrsQuotes.Api/Providers/Quotes/IQuoteProvider.cs": {
+    "mtime": 1784572785.5441449,
+    "ast_hash": "b12971e576a78fa65c09e17b84859a45",
+    "semantic_hash": "b12971e576a78fa65c09e17b84859a45"
+  },
+  "backend/MrsQuotes.Api/Providers/Quotes/PhotoDownloadTicketService.cs": {
+    "mtime": 1784573239.1506307,
+    "ast_hash": "ad47213b1c93030017aeae4a8a52251c",
+    "semantic_hash": "ad47213b1c93030017aeae4a8a52251c"
+  },
+  "backend/MrsQuotes.Api/Providers/Quotes/QuoteProvider.cs": {
+    "mtime": 1784836622.702191,
+    "ast_hash": "62e993edf33923157febd282b28ae624",
+    "semantic_hash": "62e993edf33923157febd282b28ae624"
+  },
+  "backend/MrsQuotes.Api/Providers/Storage/CompletedQuotePhotoPurgeWorker.cs": {
+    "mtime": 1784572923.045206,
+    "ast_hash": "99f54bcc3b3268e6fcab32185ac3e80a",
+    "semantic_hash": "99f54bcc3b3268e6fcab32185ac3e80a"
+  },
+  "backend/MrsQuotes.Api/Providers/Storage/IPhotoStorage.cs": {
+    "mtime": 1784572827.2046633,
+    "ast_hash": "2e1b5aa16e8449249dbabc675e2b97bc",
+    "semantic_hash": "2e1b5aa16e8449249dbabc675e2b97bc"
+  },
+  "backend/MrsQuotes.Api/Providers/Storage/PhotoStorage.cs": {
+    "mtime": 1784573120.628389,
+    "ast_hash": "ce50b8b0512b9ab8e1620af5933c3348",
+    "semantic_hash": "ce50b8b0512b9ab8e1620af5933c3348"
+  },
+  "backend/MrsQuotes.Api/Providers/Storage/PhotoUpload.cs": {
+    "mtime": 1784495079.4855218,
+    "ast_hash": "2fbc316642616814a9c1d1958def6254",
+    "semantic_hash": "2fbc316642616814a9c1d1958def6254"
+  },
+  "backend/MrsQuotes.Api/Providers/Users/IUserProvider.cs": {
+    "mtime": 1784840700.1085145,
+    "ast_hash": "3fdd27215a649289fc79d12baa81ce00",
+    "semantic_hash": "3fdd27215a649289fc79d12baa81ce00"
+  },
+  "backend/MrsQuotes.Api/Providers/Users/UserProvider.cs": {
+    "mtime": 1784840700.1517625,
+    "ast_hash": "b1d4b7a3d51a4d9321687ceffe7c4816",
+    "semantic_hash": "b1d4b7a3d51a4d9321687ceffe7c4816"
+  },
+  "backend/MrsQuotes.Api/Security/ClaimsPrincipalExtensions.cs": {
+    "mtime": 1784494909.2019298,
+    "ast_hash": "c3855f6cbc4b6115e472523c0c5dda7b",
+    "semantic_hash": "c3855f6cbc4b6115e472523c0c5dda7b"
+  },
+  "backend/MrsQuotes.Api/Security/PolicyNames.cs": {
+    "mtime": 1784495115.948683,
+    "ast_hash": "2ca33750f8e8810eeb3489ac0d0ed249",
+    "semantic_hash": "2ca33750f8e8810eeb3489ac0d0ed249"
+  },
+  "backend/MrsQuotes.Api/Security/RoleNames.cs": {
+    "mtime": 1784494824.222084,
+    "ast_hash": "819ec3f66371fb6e8969cef05c460c96",
+    "semantic_hash": "819ec3f66371fb6e8969cef05c460c96"
+  },
+  "backend/MrsQuotes.Api/SeedData/clients.json": {
+    "mtime": 1784495308.6859217,
+    "ast_hash": "a73bb23f3e3a01c3d6cba8e6ce8cf63c",
+    "semantic_hash": "a73bb23f3e3a01c3d6cba8e6ce8cf63c"
+  },
+  "backend/MrsQuotes.Api/SeedData/outsurance-rates-2026.json": {
+    "mtime": 1784836622.7061937,
+    "ast_hash": "fbe80cc24aecf1487ea9cd5aaab841a5",
+    "semantic_hash": "fbe80cc24aecf1487ea9cd5aaab841a5"
+  },
+  "backend/MrsQuotes.Api/Startup/ApiExceptionMiddleware.cs": {
+    "mtime": 1784573755.00064,
+    "ast_hash": "257d53c8726def94374cd9bfe66faccc",
+    "semantic_hash": "257d53c8726def94374cd9bfe66faccc"
+  },
+  "backend/MrsQuotes.Api/Startup/Authentication/AuthenticationSetup.cs": {
+    "mtime": 1784495115.9626799,
+    "ast_hash": "887f195ce7cb2e7d1dbc1b6ac78d7fc0",
+    "semantic_hash": "887f195ce7cb2e7d1dbc1b6ac78d7fc0"
+  },
+  "backend/MrsQuotes.Api/Startup/DependencyInjection/DependencyInjectionSetup.cs": {
+    "mtime": 1784840712.1097047,
+    "ast_hash": "a061828f09050a082b6c7da4ecea09cc",
+    "semantic_hash": "a061828f09050a082b6c7da4ecea09cc"
+  },
+  "backend/MrsQuotes.Api/Startup/EndpointMapping/EndpointMappingExtensions.cs": {
+    "mtime": 1784840712.1645658,
+    "ast_hash": "bb475fa780b2f0bf81eb7030d080f00e",
+    "semantic_hash": "bb475fa780b2f0bf81eb7030d080f00e"
+  },
+  "backend/MrsQuotes.Api/Startup/Validations/ValidationEndpointExtensions.cs": {
+    "mtime": 1784494875.278713,
+    "ast_hash": "c80968e71f11d8400b6fb6f90bb7754e",
+    "semantic_hash": "c80968e71f11d8400b6fb6f90bb7754e"
+  },
+  "backend/MrsQuotes.Api/Validations/AppointmentValidators.cs": {
+    "mtime": 1784494875.2937155,
+    "ast_hash": "60b76c74a5f203799c7110f3406c54e3",
+    "semantic_hash": "60b76c74a5f203799c7110f3406c54e3"
+  },
+  "backend/MrsQuotes.Api/Validations/AuthenticationValidators.cs": {
+    "mtime": 1784494875.2807188,
+    "ast_hash": "41ffa1c9d7175b021ea7094ee2bbad1a",
+    "semantic_hash": "41ffa1c9d7175b021ea7094ee2bbad1a"
+  },
+  "backend/MrsQuotes.Api/Validations/QuoteValidators.cs": {
+    "mtime": 1784836622.711193,
+    "ast_hash": "d3e590ba6a4b642eacb7ce9af9d3a1e6",
+    "semantic_hash": "d3e590ba6a4b642eacb7ce9af9d3a1e6"
+  },
+  "backend/MrsQuotes.Api/Validations/UserValidators.cs": {
+    "mtime": 1784840700.0657268,
+    "ast_hash": "4ef1a546547570a089d61aed48772e66",
+    "semantic_hash": "4ef1a546547570a089d61aed48772e66"
+  },
+  "backend/MrsQuotes.Api/appsettings.Development.json": {
+    "mtime": 1784494431.6549766,
+    "ast_hash": "804b473502a4c415cf75db61c56c32aa",
+    "semantic_hash": "804b473502a4c415cf75db61c56c32aa"
+  },
+  "backend/MrsQuotes.Api/appsettings.json": {
+    "mtime": 1784836732.8702826,
+    "ast_hash": "058e5c2532daebd7d3fd0de1e1eb57b5",
+    "semantic_hash": "058e5c2532daebd7d3fd0de1e1eb57b5"
+  },
+  "backend/MrsQuotes.Client/ClientProblemDetails.cs": {
+    "mtime": 1784495572.262736,
+    "ast_hash": "d20b05c2d5a292fc1eb59a68af8dc82d",
+    "semantic_hash": "d20b05c2d5a292fc1eb59a68af8dc82d"
+  },
+  "backend/MrsQuotes.Client/MrsQuotes.Client.csproj": {
+    "mtime": 1784494458.0232449,
+    "ast_hash": "e8a36b33cf97d7699ef69d07c227874c",
+    "semantic_hash": "e8a36b33cf97d7699ef69d07c227874c"
+  },
+  "backend/MrsQuotes.Client/MrsQuotesClient.cs": {
+    "mtime": 1784495572.2647374,
+    "ast_hash": "ab0c4a89e7bdbd645d0ee58bfa2a04bd",
+    "semantic_hash": "ab0c4a89e7bdbd645d0ee58bfa2a04bd"
+  },
+  "backend/MrsQuotes.Client/MrsQuotesClientBase.cs": {
+    "mtime": 1784495572.2637365,
+    "ast_hash": "767d89edda38a04db449a7c1d1261f21",
+    "semantic_hash": "767d89edda38a04db449a7c1d1261f21"
+  },
+  "backend/MrsQuotes.IntegrationTests/Common/ApiWebApplicationFactory.cs": {
+    "mtime": 1784836622.7121925,
+    "ast_hash": "06583574babb01d1fa8c5c414b3fde31",
+    "semantic_hash": "06583574babb01d1fa8c5c414b3fde31"
+  },
+  "backend/MrsQuotes.IntegrationTests/MrsQuotes.IntegrationTests.csproj": {
+    "mtime": 1784496042.7369888,
+    "ast_hash": "9adfc69fa26b4bd2ec7b970481bcecb5",
+    "semantic_hash": "9adfc69fa26b4bd2ec7b970481bcecb5"
+  },
+  "backend/MrsQuotes.IntegrationTests/Tests/AuthenticationTests.cs": {
+    "mtime": 1784495699.699735,
+    "ast_hash": "48328e0428d23536fb88a18b7bd92c9b",
+    "semantic_hash": "48328e0428d23536fb88a18b7bd92c9b"
+  },
+  "backend/MrsQuotes.IntegrationTests/Tests/QuoteWorkflowTests.cs": {
+    "mtime": 1784836622.7151995,
+    "ast_hash": "3c008038efbbcd2a034ea5649bcfb50f",
+    "semantic_hash": "3c008038efbbcd2a034ea5649bcfb50f"
+  },
+  "backend/MrsQuotes.Models/Appointments/AppointmentContracts.cs": {
+    "mtime": 1784494689.8154602,
+    "ast_hash": "3c8fed5aed4b6edc95aadc02648c4e64",
+    "semantic_hash": "3c8fed5aed4b6edc95aadc02648c4e64"
+  },
+  "backend/MrsQuotes.Models/Authentication/AuthContracts.cs": {
+    "mtime": 1784494689.808459,
+    "ast_hash": "56692f391b34adae97e1897082950378",
+    "semantic_hash": "56692f391b34adae97e1897082950378"
+  },
+  "backend/MrsQuotes.Models/Clients/ClientContracts.cs": {
+    "mtime": 1784494689.8114612,
+    "ast_hash": "f39cd847bb82c5d893f3756992a84613",
+    "semantic_hash": "f39cd847bb82c5d893f3756992a84613"
+  },
+  "backend/MrsQuotes.Models/MrsQuotes.Models.csproj": {
+    "mtime": 1784496042.739988,
+    "ast_hash": "69d04fcefc7355a90be8f68be11063f8",
+    "semantic_hash": "69d04fcefc7355a90be8f68be11063f8"
+  },
+  "backend/MrsQuotes.Models/Pricing/PricingContracts.cs": {
+    "mtime": 1784836622.7162004,
+    "ast_hash": "7a4559c2ca25d7e877876a811bec8755",
+    "semantic_hash": "7a4559c2ca25d7e877876a811bec8755"
+  },
+  "backend/MrsQuotes.Models/Quotes/QuoteContracts.cs": {
+    "mtime": 1784836622.7172008,
+    "ast_hash": "eae2c88b6c8ef6da4131726259c1bcf8",
+    "semantic_hash": "eae2c88b6c8ef6da4131726259c1bcf8"
+  },
+  "backend/MrsQuotes.Models/Users/UserContracts.cs": {
+    "mtime": 1784840700.0217645,
+    "ast_hash": "70fd91a427dc731068e0f7eefbd29858",
+    "semantic_hash": "70fd91a427dc731068e0f7eefbd29858"
+  },
+  "backend/MrsQuotes.slnx": {
+    "mtime": 1784494456.500992,
+    "ast_hash": "b82b4a72b96c47b12aa270a5bc984716",
+    "semantic_hash": "b82b4a72b96c47b12aa270a5bc984716"
+  },
+  "frontend/package.json": {
+    "mtime": 1784836622.7242005,
+    "ast_hash": "bd5aa387f8dfbe02d0e2b236d92072d4",
+    "semantic_hash": "bd5aa387f8dfbe02d0e2b236d92072d4"
+  },
+  "frontend/public/sw.js": {
+    "mtime": 1784840492.97559,
+    "ast_hash": "b1fb705d4cb9f4c49aa3267de960769b",
+    "semantic_hash": "b1fb705d4cb9f4c49aa3267de960769b"
+  },
+  "frontend/src/app/App.tsx": {
+    "mtime": 1784870110.647034,
+    "ast_hash": "f6d7c93e2d959f30811c0014aeacb6d6",
+    "semantic_hash": "f6d7c93e2d959f30811c0014aeacb6d6"
+  },
+  "frontend/src/app/AppRoutes.tsx": {
+    "mtime": 1784836622.728717,
+    "ast_hash": "f59bd2c6a266a1433cf40f4679885f1e",
+    "semantic_hash": "f59bd2c6a266a1433cf40f4679885f1e"
+  },
+  "frontend/src/app/hooks.ts": {
+    "mtime": 1784836622.7297182,
+    "ast_hash": "50bae8962e7a57cb0f6fafe8249a65f7",
+    "semantic_hash": "50bae8962e7a57cb0f6fafe8249a65f7"
+  },
+  "frontend/src/app/roles.ts": {
+    "mtime": 1784836622.7297182,
+    "ast_hash": "a3e4ca6f7743465edb090348d0eaf484",
+    "semantic_hash": "a3e4ca6f7743465edb090348d0eaf484"
+  },
+  "frontend/src/app/store.ts": {
+    "mtime": 1784836622.7307174,
+    "ast_hash": "420eb6bb0bf87441283f5362c65c49d8",
+    "semantic_hash": "420eb6bb0bf87441283f5362c65c49d8"
+  },
+  "frontend/src/features/assignments/AssignmentsPage.tsx": {
+    "mtime": 1784836622.73272,
+    "ast_hash": "4e76b90e2210f1a669fe36ad94c6ea1e",
+    "semantic_hash": "4e76b90e2210f1a669fe36ad94c6ea1e"
+  },
+  "frontend/src/features/auth/LoginPage.tsx": {
+    "mtime": 1784836635.0473697,
+    "ast_hash": "2bd75106a57216d4f52d768fdd21f950",
+    "semantic_hash": "2bd75106a57216d4f52d768fdd21f950"
+  },
+  "frontend/src/features/auth/authSlice.ts": {
+    "mtime": 1784836622.735723,
+    "ast_hash": "2125437095280042f432eea4f37f6895",
+    "semantic_hash": "2125437095280042f432eea4f37f6895"
+  },
+  "frontend/src/features/calendar/CalendarPage.tsx": {
+    "mtime": 1784836622.7367187,
+    "ast_hash": "fcb8f249e14c42ae8224959f6e20293b",
+    "semantic_hash": "fcb8f249e14c42ae8224959f6e20293b"
+  },
+  "frontend/src/features/quotes/QuoteBuilderPage.tsx": {
+    "mtime": 1784836622.738719,
+    "ast_hash": "553cb5dfc541ec285fd258df75ae9d0e",
+    "semantic_hash": "553cb5dfc541ec285fd258df75ae9d0e"
+  },
+  "frontend/src/features/quotes/QuotesPage.tsx": {
+    "mtime": 1784836622.73972,
+    "ast_hash": "6dff3ac2b54486ebe3850fb0b1a54edf",
+    "semantic_hash": "6dff3ac2b54486ebe3850fb0b1a54edf"
+  },
+  "frontend/src/features/quotes/domain/photoService.ts": {
+    "mtime": 1784836622.7417226,
+    "ast_hash": "607ad53b24b9319f5ee8f3d309fcb350",
+    "semantic_hash": "607ad53b24b9319f5ee8f3d309fcb350"
+  },
+  "frontend/src/features/quotes/domain/quoteRules.ts": {
+    "mtime": 1784836622.74972,
+    "ast_hash": "31459aa9c6088d3500589ade16e0b313",
+    "semantic_hash": "31459aa9c6088d3500589ade16e0b313"
+  },
+  "frontend/src/features/quotes/domain/quoteSla.ts": {
+    "mtime": 1784836622.7507205,
+    "ast_hash": "7669a15e7bd96509aa44a57a40030f22",
+    "semantic_hash": "7669a15e7bd96509aa44a57a40030f22"
+  },
+  "frontend/src/features/quotes/domain/quoteTypes.ts": {
+    "mtime": 1784836622.7517211,
+    "ast_hash": "9071de7bf83f4909dbe32f7e6fff189d",
+    "semantic_hash": "9071de7bf83f4909dbe32f7e6fff189d"
+  },
+  "frontend/src/features/quotes/state/quoteWizardSelectors.ts": {
+    "mtime": 1784836622.7527194,
+    "ast_hash": "566237b5b5d1d3e64b80354812d06717",
+    "semantic_hash": "566237b5b5d1d3e64b80354812d06717"
+  },
+  "frontend/src/features/quotes/state/quoteWizardSlice.ts": {
+    "mtime": 1784836622.7537215,
+    "ast_hash": "a371d857a4ba31230aaf85d956e910c7",
+    "semantic_hash": "a371d857a4ba31230aaf85d956e910c7"
+  },
+  "frontend/src/features/scheduling/SchedulePage.tsx": {
+    "mtime": 1784836622.762721,
+    "ast_hash": "d589242d015758345558c70b3f0a0207",
+    "semantic_hash": "d589242d015758345558c70b3f0a0207"
+  },
+  "frontend/src/features/users/UsersPage.tsx": {
+    "mtime": 1784840774.0041628,
+    "ast_hash": "dbe6d368ac9b29b68a2e98a6df12ad13",
+    "semantic_hash": "dbe6d368ac9b29b68a2e98a6df12ad13"
+  },
+  "frontend/src/main.tsx": {
+    "mtime": 1784840492.79012,
+    "ast_hash": "c41974a8ca34a7116045950ad4de5bda",
+    "semantic_hash": "c41974a8ca34a7116045950ad4de5bda"
+  },
+  "frontend/src/services/apiDtos.ts": {
+    "mtime": 1784840738.5398202,
+    "ast_hash": "9a4a582e071954e71bf3333a9b5a4b43",
+    "semantic_hash": "9a4a582e071954e71bf3333a9b5a4b43"
+  },
+  "frontend/src/services/baseApi.ts": {
+    "mtime": 1784840738.5894063,
+    "ast_hash": "747617e2a45575411a20ab4428b36ed1",
+    "semantic_hash": "747617e2a45575411a20ab4428b36ed1"
+  },
+  "frontend/src/services/mediaService.ts": {
+    "mtime": 1784836622.774725,
+    "ast_hash": "641ed0d5372a29134308aed10720ccd2",
+    "semantic_hash": "641ed0d5372a29134308aed10720ccd2"
+  },
+  "frontend/src/services/sessionService.ts": {
+    "mtime": 1784836622.7757235,
+    "ast_hash": "464cc910dae2c2a0d4d33257f67ca828",
+    "semantic_hash": "464cc910dae2c2a0d4d33257f67ca828"
+  },
+  "frontend/src/shared/components/DateTimePicker.tsx": {
+    "mtime": 1784836622.7787209,
+    "ast_hash": "bf5cc9e559bc9a9a73bedf2340c14825",
+    "semantic_hash": "bf5cc9e559bc9a9a73bedf2340c14825"
+  },
+  "frontend/src/shared/components/PageTitle.tsx": {
+    "mtime": 1784836622.7807224,
+    "ast_hash": "3c19a06b2fd7b37c1de83b27f549779f",
+    "semantic_hash": "3c19a06b2fd7b37c1de83b27f549779f"
+  },
+  "frontend/src/shared/date/dateUtils.ts": {
+    "mtime": 1784836622.783723,
+    "ast_hash": "e693e851493c2e08f0333ffb1ba3a3d0",
+    "semantic_hash": "e693e851493c2e08f0333ffb1ba3a3d0"
+  },
+  "frontend/src/shared/date/useCurrentTime.ts": {
+    "mtime": 1784836622.7847242,
+    "ast_hash": "a458de4c2798057005e541ec184857a4",
+    "semantic_hash": "a458de4c2798057005e541ec184857a4"
+  },
+  "frontend/src/shared/pwa/PwaInstallAction.tsx": {
+    "mtime": 1784840516.260262,
+    "ast_hash": "0cb9e1547cc0e5f26343a3a68feeb178",
+    "semantic_hash": "0cb9e1547cc0e5f26343a3a68feeb178"
+  },
+  "frontend/src/shared/pwa/registerServiceWorker.ts": {
+    "mtime": 1784840455.5561705,
+    "ast_hash": "00319057529014b7dc1a7b03cf9f0bda",
+    "semantic_hash": "00319057529014b7dc1a7b03cf9f0bda"
+  },
+  "frontend/src/shared/pwa/usePwaInstall.ts": {
+    "mtime": 1784840455.5157506,
+    "ast_hash": "f4d1f8a63fcd731a4363db6011e04e28",
+    "semantic_hash": "f4d1f8a63fcd731a4363db6011e04e28"
+  },
+  "frontend/src/shared/quote/quoteFormatters.ts": {
+    "mtime": 1784836622.7877238,
+    "ast_hash": "343c73def2c5b05aecb8a9245fee21d3",
+    "semantic_hash": "343c73def2c5b05aecb8a9245fee21d3"
+  },
+  "frontend/src/vite-env.d.ts": {
+    "mtime": 1784836622.7917259,
+    "ast_hash": "8f68c27c3fc38817b2726b20e2d4f1ee",
+    "semantic_hash": "8f68c27c3fc38817b2726b20e2d4f1ee"
+  },
+  "frontend/tsconfig.json": {
+    "mtime": 1784836622.7917259,
+    "ast_hash": "cc300879bfdf8bc637c9aa04004c3b91",
+    "semantic_hash": "cc300879bfdf8bc637c9aa04004c3b91"
+  },
+  "frontend/vite.config.js": {
+    "mtime": 1784573005.428055,
+    "ast_hash": "f464cad1e8effd40df20bd6211a9c03d",
+    "semantic_hash": "f464cad1e8effd40df20bd6211a9c03d"
+  },
+  "scripts/Convert-Outsurance2026Rates.ps1": {
+    "mtime": 1784836622.7937243,
+    "ast_hash": "298b1289f83609e33f1daf0376d6f759",
+    "semantic_hash": "298b1289f83609e33f1daf0376d6f759"
+  }
+}
