@@ -30,6 +30,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      TZ: Africa/Johannesburg
       Application__UseHttpsRedirection: "false"
       ConnectionStrings__Database: "Server=db,1433;Database=${MSSQL_DATABASE:-MrsQuotes};User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=true"
       Authentication__JwtSigningKey: "${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}"

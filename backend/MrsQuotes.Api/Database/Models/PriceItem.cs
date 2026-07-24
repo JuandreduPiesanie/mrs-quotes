@@ -22,6 +22,6 @@ public sealed class PriceItem
     public int SortOrder { get; set; }
     public bool Active { get; set; } = true;
     public string? SourceSheet { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
     public List<QuoteItem> QuoteItems { get; set; } = new();
 }

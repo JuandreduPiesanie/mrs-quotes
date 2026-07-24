@@ -62,7 +62,7 @@ public static class DatabaseInitializer
         {
             if (!existingByCode.TryGetValue(seed.ItemCode, out var item))
             {
-                item = new PriceItem { ItemCode = seed.ItemCode, CreatedAt = DateTime.UtcNow };
+                item = new PriceItem { ItemCode = seed.ItemCode, CreatedAt = DateTime.Now };
                 context.PriceItems.Add(item);
             }
 

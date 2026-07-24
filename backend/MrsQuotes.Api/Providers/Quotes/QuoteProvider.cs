@@ -227,7 +227,7 @@ public sealed class QuoteProvider(
         {
             throw new InvalidOperationException("Only outstanding submitted quotes can be completed.");
         }
-        var completedAt = DateTime.UtcNow;
+        var completedAt = DateTime.Now;
         var photosToPurge = quote.Photos.ToList();
         quote.Status = "completed";
         quote.ErpQuoteNumber = erpQuoteNumber.Trim();

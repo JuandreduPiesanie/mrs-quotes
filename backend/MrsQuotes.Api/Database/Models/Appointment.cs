@@ -13,6 +13,6 @@ public sealed class Appointment
     public DateTime AppointmentStart { get; set; }
     public DateTime? AppointmentEnd { get; set; }
     public string Status { get; set; } = "scheduled";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
     public Quote? Quote { get; set; }
 }

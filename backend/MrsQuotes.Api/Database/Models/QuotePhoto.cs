@@ -8,5 +8,5 @@ public sealed class QuotePhoto
     public string OriginalName { get; set; } = "";
     public string FileName { get; set; } = "";
     public string MimeType { get; set; } = "";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 }

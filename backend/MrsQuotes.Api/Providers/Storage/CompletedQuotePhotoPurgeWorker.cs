@@ -33,7 +33,7 @@ public sealed class CompletedQuotePhotoPurgeWorker(
         using var scope = scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<MrsQuotesDbContext>();
         var photoStorage = scope.ServiceProvider.GetRequiredService<IPhotoStorage>();
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         var quotes = await context.Quotes
             .Include(x => x.Photos)
             .Where(x => x.Status == "completed"
@@ -71,7 +71,7 @@ public sealed class CompletedQuotePhotoPurgeWorker(
             }
             if (deletedPhotos.Count == originalPhotoCount)
             {
-                quote.PhotosPurgedAt = DateTime.UtcNow;
+                quote.PhotosPurgedAt = DateTime.Now;
             }
         }
 
