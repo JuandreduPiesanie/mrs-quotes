@@ -64,6 +64,14 @@ public sealed class QuoteHandler(
             : Results.NotFound(new { error = "Quote not found." });
     }
 
+    public async Task<IResult> Approve(int id, ClaimsPrincipal principal)
+    {
+        var approved = await provider.ApproveAsync(id, principal.UserId(), principal.UserRole());
+        return approved
+            ? Results.Ok(new { id, message = "Quote approved." })
+            : Results.NotFound(new { error = "Quote not found." });
+    }
+
     public async Task<IResult> Complete(
         int id,
         CompleteQuoteRequest request,

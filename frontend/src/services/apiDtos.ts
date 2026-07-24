@@ -1,7 +1,7 @@
 import type { Role } from '../app/roles';
 
 export type IsoDateTime = string;
-export type QuoteStatus = 'submitted' | 'completed';
+export type QuoteStatus = 'submitted' | 'approved' | 'completed';
 export type CalendarEntryType = 'appointment' | 'quote_task';
 export type PricingMode = 'fixed' | 'cost' | 'cost_plus' | 'manual';
 
@@ -193,6 +193,7 @@ export interface QuoteDto {
   photos_purged_at: IsoDateTime | null;
   photo_purge_eligible_at: IsoDateTime | null;
   completed_at: IsoDateTime | null;
+  approved_at: IsoDateTime | null;
   created_at: IsoDateTime;
   photo_count: number;
   items: QuoteItemDto[];

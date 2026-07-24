@@ -19,7 +19,7 @@ import { formatDate } from '../../shared/date/dateUtils';
 import { useCurrentTime } from '../../shared/date/useCurrentTime';
 import { quoteQuantityLabel } from '../../shared/quote/quoteFormatters';
 import { useAppSelector } from '../../app/hooks';
-import { getApiErrorMessage, useCompleteQuoteMutation, useGetAssessorsQuery, useGetQuotesQuery, useLazyGetQuoteQuery } from '../../services/baseApi';
+import { getApiErrorMessage, useApproveQuoteMutation, useCompleteQuoteMutation, useGetAssessorsQuery, useGetQuotesQuery, useLazyGetQuoteQuery } from '../../services/baseApi';
 import { downloadQuotePhotos, loadProtectedPhoto } from '../../services/mediaService';
 import type { QuoteDto, QuotePhotoDto, QuoteStatus } from '../../services/apiDtos';
 import { getQuoteSla } from './domain/quoteSla';
@@ -42,7 +42,9 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
   const [erpQuoteNumber, setErpQuoteNumber] = useState('');
   const [photoArchiveUrl, setPhotoArchiveUrl] = useState('');
   const [archiveVerified, setArchiveVerified] = useState(false);
-  const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>('submitted');
+  const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>(
+    role === ROLES.QUOTE_ADMINISTRATOR ? 'approved' : 'submitted'
+  );
   const quoteGridApiRef = useGridApiRef();
   const currentTime = useCurrentTime();
 
@@ -57,6 +59,7 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
   const { data: quotes = [] } = useGetQuotesQuery({ assessorId, status: quoteStatus });
   const [loadQuote] = useLazyGetQuoteQuery();
   const [completeQuote] = useCompleteQuoteMutation();
+  const [approveQuote] = useApproveQuoteMutation();
 
   useEffect(() => {
     if (!initialQuoteId) return;
@@ -71,13 +74,13 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
   );
 
   const adminRows = useMemo(() => filtered.map((quote) => {
-    const sla = getQuoteSla(quote.created_at, currentTime);
+    const sla = getQuoteSla(quote.approved_at, currentTime);
     return {
       ...quote,
       quote_label: quote.quote_number || `Quote #${quote.id}`,
       submitted_label: formatDate(quote.created_at),
-      sla_state: sla.state,
-      sla_label: sla.label,
+      sla_state: sla?.state ?? '',
+      sla_label: sla?.label ?? (quote.status === 'submitted' ? 'Pending approval' : ''),
       subtotal_label: `R ${Number(quote.subtotal || 0).toFixed(2)}`
     };
   }), [currentTime, filtered]);
@@ -131,6 +134,19 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
     }
   }
 
+  async function approveActiveQuote() {
+    if (!active) return;
+    setDownloadMessage('');
+    try {
+      await approveQuote(active.id).unwrap();
+      const updated = await loadQuote(active.id, false).unwrap();
+      setQuoteStatus('approved');
+      setActive(updated);
+    } catch (err) {
+      setDownloadMessage(getApiErrorMessage(err));
+    }
+  }
+
   async function openQuote(id: number) {
     setPhotoIndex(null);
     setDownloadMessage('');
@@ -179,11 +195,12 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
                 <p className="muted">{active.site_address}</p>
                 <p className="muted">Assessor: {active.assessor_name}</p>
                 {active.quote_administrator_name && <p className="muted">Quote admin: {active.quote_administrator_name}</p>}
-                <p className="muted">Status: {active.status === 'completed' ? 'Completed' : 'Outstanding'}</p>
+                <p className="muted">Status: {active.status === 'completed' ? 'Completed' : active.status === 'approved' ? 'Approved — awaiting ERP recapture' : 'Pending management approval'}</p>
                 {active.erp_quote_number && <p className="muted">ERP quote: {active.erp_quote_number}</p>}
               </div>
               <div className="detail-actions">
-                {isQuoteAdministrator && active.status === 'submitted' && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
+                {isManagement && active.status === 'submitted' && <button className="primary" onClick={approveActiveQuote}><Check size={18} />Approve quote</button>}
+                {isQuoteAdministrator && active.status === 'approved' && active.photos.length > 0 && <button className="primary" onClick={downloadPhotos}><Download size={18} />Download photos</button>}
                 {canEditQuote && active.status === 'submitted' && <button className="secondary" onClick={() => onEditQuote(active)}>Edit quote</button>}
               </div>
             </div>
@@ -192,8 +209,9 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
                 <section className="quote-location-group automatic-fee-group">
                   <h3>Automatic fees</h3>
                   <div className={canReviewQuotes ? 'line-table priced' : 'line-table'}>
+                    {canReviewQuotes && <div className="line-table-header"><span>Description</span><span>Qty</span><span>Unit cost</span><span>Total</span></div>}
                     {automaticFees.map((item) => (
-                      <div key={item.id}><span>{item.description}<em className="system-fee-badge">Automatic 2026 fee</em></span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+                      <div key={item.id}><span>{item.description}<em className="system-fee-badge">Automatic fee</em></span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <span>R {item.unit_rate.toFixed(2)}</span>}{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
                     ))}
                   </div>
                 </section>
@@ -202,15 +220,16 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
                 <section className="quote-location-group" key={group.location}>
                   <h3><MapPin size={18} />{group.location}</h3>
                   <div className={canReviewQuotes ? 'line-table priced' : 'line-table'}>
+                    {canReviewQuotes && <div className="line-table-header"><span>Description</span><span>Qty</span><span>Unit cost</span><span>Total</span></div>}
                     {group.items.map((item) => (
-                      <div key={item.id}><span>{item.description}<small>{item.trade_name}</small></span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
+                      <div key={item.id}><span>{item.description}<small>{item.trade_name}</small></span><span>{quoteQuantityLabel(item.quantity, item.unit)}</span>{canReviewQuotes && <span>R {item.unit_rate.toFixed(2)}</span>}{canReviewQuotes && <strong>R {item.line_total.toFixed(2)}</strong>}</div>
                     ))}
                   </div>
                 </section>
               ))}
             </div>
-            {canReviewQuotes && <h3>Reference total: R {active.subtotal.toFixed(2)}</h3>}
-            {isQuoteAdministrator && active.status === 'submitted' && (
+            {canReviewQuotes && <h3>Quote total: R {active.subtotal.toFixed(2)}</h3>}
+            {isQuoteAdministrator && active.status === 'approved' && (
               <div className="erp-complete-panel">
                 <label>ERP Quote Number<input required value={erpQuoteNumber} onChange={(e) => setErpQuoteNumber(e.target.value)} placeholder="Enter ERP quote number" /></label>
                 <label>OneDrive Photo Folder URL<input required type="url" value={photoArchiveUrl} onChange={(e) => setPhotoArchiveUrl(e.target.value)} placeholder="Paste the OneDrive or SharePoint folder link" /></label>
@@ -277,12 +296,17 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
   }
 
   const showingCompleted = quoteStatus === 'completed';
+  const showingApproved = quoteStatus === 'approved';
   const title = showingCompleted
     ? 'Completed Quotes'
-    : isAssessor ? 'My Quotes' : isManagement ? 'Outstanding Quote Work' : 'My Outstanding Quotes';
+    : showingApproved
+      ? isAssessor ? 'My Approved Quotes' : isManagement ? 'Approved Quote Work' : 'My Outstanding Quotes'
+      : isAssessor ? 'My Quotes' : 'Pending Approval';
   const subtitle = showingCompleted
     ? 'Open a completed quote to view its ERP number and OneDrive photo archive.'
-    : isAssessor ? 'Track and edit submitted quotes until the quote administrator completes them.' : 'Open a submitted quote to review the full packet.';
+    : showingApproved
+      ? isAssessor ? 'Track approved quotes currently being processed.' : isManagement ? 'Approved quotes awaiting ERP recapture by quote administrators.' : 'Open an approved quote to review the full packet and recapture in ERP.'
+      : isAssessor ? 'Track submitted quotes awaiting management approval.' : 'Review submitted quotes and approve them for ERP recapture.';
 
   return (
     <section className="workspace quotes-workspace">
@@ -290,7 +314,8 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
 
       <div className="quote-tools">
         <select className="filter-select" value={quoteStatus} onChange={(e) => { setQuoteStatus(e.target.value as QuoteStatus); setActive(null); }}>
-          <option value="submitted">Outstanding quotes</option>
+          {(isAssessor || isManagement) && <option value="submitted">Pending approval</option>}
+          <option value="approved">{isManagement || isAssessor ? 'Approved / In progress' : 'Outstanding quotes'}</option>
           <option value="completed">Completed quotes</option>
         </select>
         {canReviewQuotes && (
@@ -314,7 +339,7 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
             disableRowSelectionOnClick
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-            getRowClassName={(params) => quoteStatus === 'submitted' ? `sla-row-${params.row.sla_state}` : ''}
+            getRowClassName={(params) => params.row.sla_state ? `sla-row-${params.row.sla_state}` : ''}
             onRowClick={(params) => selectQuote(Number(params.id))}
             sx={{
               border: 0,
@@ -327,8 +352,8 @@ export function QuotesView({ role, initialQuoteId, onOpenedInitialQuote, onOpenQ
         <div className="quote-browser">
           <div className="quote-list">
             {filtered.map((quote) => {
-              const sla = getQuoteSla(quote.created_at, currentTime);
-              const quoteCardClassName = quoteStatus === 'submitted' ? `quote-card sla-${sla.state}` : 'quote-card';
+              const sla = getQuoteSla(quote.approved_at, currentTime);
+              const quoteCardClassName = sla ? `quote-card sla-${sla.state}` : 'quote-card';
               return (
               <button key={quote.id} className={quoteCardClassName} onClick={() => selectQuote(quote.id)}>
                 <strong>{quote.quote_number || `Quote #${quote.id}`}</strong>

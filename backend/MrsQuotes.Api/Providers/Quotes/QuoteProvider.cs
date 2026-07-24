@@ -20,9 +20,9 @@ public sealed class QuoteProvider(
         var requestedStatus = string.IsNullOrWhiteSpace(status)
             ? "submitted"
             : status.Trim().ToLowerInvariant();
-        if (requestedStatus is not ("submitted" or "completed" or "all"))
+        if (requestedStatus is not ("submitted" or "approved" or "completed" or "all"))
         {
-            throw new InvalidOperationException("Quote status must be submitted, completed, or all.");
+            throw new InvalidOperationException("Quote status must be submitted, approved, completed, or all.");
         }
 
         var query = context.Quotes.AsNoTracking();
@@ -62,6 +62,7 @@ public sealed class QuoteProvider(
             ArchivedPhotoCount = x.ArchivedPhotoCount,
             PhotosPurgedAt = x.PhotosPurgedAt,
             PhotoPurgeEligibleAt = x.PhotoPurgeEligibleAt,
+            ApprovedAt = x.ApprovedAt,
             CompletedAt = x.CompletedAt,
             CreatedAt = x.CreatedAt,
             PhotoCount = x.Status == "completed" ? x.ArchivedPhotoCount : x.Photos.Count
@@ -223,9 +224,9 @@ public sealed class QuoteProvider(
             .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId);
         if (quote is null || !CanAccess(quote, userId, role)) return false;
-        if (quote.Status != "submitted")
+        if (quote.Status != "approved")
         {
-            throw new InvalidOperationException("Only outstanding submitted quotes can be completed.");
+            throw new InvalidOperationException("Only approved quotes can be completed.");
         }
         var completedAt = DateTime.Now;
         var photosToPurge = quote.Photos.ToList();
@@ -251,7 +252,7 @@ public sealed class QuoteProvider(
         var quote = await context.Quotes.AsNoTracking()
             .Include(x => x.Photos)
             .FirstOrDefaultAsync(x => x.Id == quoteId, cancellationToken);
-        if (quote is null || quote.Status != "submitted" || !CanAccess(quote, userId, role)) return null;
+        if (quote is null || quote.Status is not ("submitted" or "approved") || !CanAccess(quote, userId, role)) return null;
         if (quote.Photos.Count == 0) throw new InvalidOperationException("This quote has no photos to download.");
 
         var files = new List<QuoteArchiveFile>();
@@ -445,6 +446,7 @@ public sealed class QuoteProvider(
             ArchivedPhotoCount = quote.ArchivedPhotoCount,
             PhotosPurgedAt = quote.PhotosPurgedAt,
             PhotoPurgeEligibleAt = quote.PhotoPurgeEligibleAt,
+            ApprovedAt = quote.ApprovedAt,
             CompletedAt = quote.CompletedAt,
             CreatedAt = quote.CreatedAt,
             PhotoCount = quote.Status == "completed" ? quote.ArchivedPhotoCount : quote.Photos.Count,
@@ -478,4 +480,18 @@ public sealed class QuoteProvider(
     }
 
     private static string FormatQuoteNumber(int id) => $"MRS-Q-{id:000000}";
+
+    public async Task<bool> ApproveAsync(int quoteId, int userId, string role)
+    {
+        var quote = await context.Quotes.FirstOrDefaultAsync(x => x.Id == quoteId);
+        if (quote is null || !CanAccess(quote, userId, role)) return false;
+        if (quote.Status != "submitted")
+        {
+            throw new InvalidOperationException("Only quotes pending approval can be approved.");
+        }
+        quote.Status = "approved";
+        quote.ApprovedAt = DateTime.Now;
+        await context.SaveChangesAsync();
+        return true;
+    }
 }

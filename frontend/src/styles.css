@@ -89,7 +89,11 @@ textarea { min-height: 92px; resize: vertical; }
 .detail-panel { min-height: 420px; }
 .line-table { display: grid; border-top: 1px solid #edf1ef; margin-top: 16px; }
 .line-table div { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 18px; padding: 11px 0; border-bottom: 1px solid #edf1ef; }
-.line-table.priced div { grid-template-columns: minmax(0, 1fr) max-content max-content; }
+.line-table.priced { display: table; width: 100%; border-collapse: collapse; }
+.line-table.priced > div { display: table-row; }
+.line-table.priced > div > * { display: table-cell; padding: 10px 14px 10px 12px; border-bottom: 1px solid #dce5e2; vertical-align: middle; }
+.line-table.priced > div > *:not(:first-child) { padding-left: 14px; padding-right: 14px; border-left: 1px solid #dce5e2; text-align: center; white-space: nowrap; }
+.line-table.priced > .line-table-header > * { padding-top: 8px; padding-bottom: 8px; border-top: 1px solid #dce5e2; background: #f6f9f7; font-size: 0.72rem; font-weight: 600; color: #687579; text-transform: uppercase; letter-spacing: 0.05em; }
 .line-table span:first-child { overflow-wrap: anywhere; }
 .line-table span:first-child small { display: block; margin-top: 4px; color: #687579; }
 .quote-location-groups { display: grid; gap: 18px; margin-top: 18px; }
@@ -180,6 +184,10 @@ textarea { min-height: 92px; resize: vertical; }
   .nav-toggle span { display: none; }
   .page-title h1 { font-size: 25px; }
   .line-table div { grid-template-columns: 1fr; }
+  .line-table.priced { display: grid; grid-template-columns: 1fr; }
+  .line-table.priced > .line-table-header { display: none; }
+  .line-table.priced > div { display: grid; grid-template-columns: 1fr; gap: 3px; padding: 11px 0; border-bottom: 1px solid #edf1ef; }
+  .line-table.priced > div > * { display: block; padding: 0; border: none !important; text-align: left !important; }
   .selected-line { grid-template-columns: 1fr; }
   .assignment-header { display: none; }
   .assignment-row { grid-template-columns: 1fr; gap: 10px; }

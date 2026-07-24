@@ -59,7 +59,9 @@ export function CalendarView({ role, onStartQuote, onOpenQuote }: CalendarViewPr
   }
 
   const subtitle = isQuoteTaskCalendar
-    ? 'Outstanding submitted quotes awaiting ERP recapture.'
+    ? role === 'quote_administrator'
+      ? 'Approved quotes ready for ERP recapture.'
+      : 'Submitted quotes awaiting your approval.'
       : isScheduleAdministrator
       ? 'Weekly appointment view by assessor.'
       : canStartQuote
@@ -92,7 +94,9 @@ export function CalendarView({ role, onStartQuote, onOpenQuote }: CalendarViewPr
             </div>
             <div className="calendar-day-body">
               {appointmentsForDay(day).map((appt) => {
-                const sla = appt.calendar_type === 'quote_task' ? getQuoteSla(appt.appointment_start, currentTime) : null;
+                const sla = appt.calendar_type === 'quote_task' && appt.status === 'approved'
+                  ? getQuoteSla(appt.appointment_start, currentTime)
+                  : null;
                 const eventClassName = sla
                   ? `calendar-event quote-task-event sla-${sla.state}`
                   : 'calendar-event';

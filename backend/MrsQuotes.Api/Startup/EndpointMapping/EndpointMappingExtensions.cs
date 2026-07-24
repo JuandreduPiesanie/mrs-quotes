@@ -92,6 +92,10 @@ public static class EndpointMappingExtensions
                 (QuoteHandler handler, int id, string? ticket, CancellationToken cancellationToken) =>
                     handler.DownloadPhotos(id, ticket, cancellationToken))
             .AllowAnonymous();
+        app.MapPatch("/api/quotes/{id:int}/approve",
+                (QuoteHandler handler, int id, ClaimsPrincipal principal) =>
+                    handler.Approve(id, principal))
+            .RequireAuthorization(PolicyNames.Management);
         app.MapPatch("/api/quotes/{id:int}/complete",
                 (QuoteHandler handler, int id, CompleteQuoteRequest request, ClaimsPrincipal principal) =>
                     handler.Complete(id, request, principal))

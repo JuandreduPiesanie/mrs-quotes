@@ -22,6 +22,7 @@ public sealed class Quote
     public int ArchivedPhotoCount { get; set; }
     public DateTime? PhotosPurgedAt { get; set; }
     public DateTime? PhotoPurgeEligibleAt { get; set; }
+    public DateTime? ApprovedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public List<QuoteItem> Items { get; set; } = new();

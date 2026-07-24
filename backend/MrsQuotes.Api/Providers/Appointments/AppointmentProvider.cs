@@ -12,8 +12,11 @@ public sealed class AppointmentProvider(MrsQuotesDbContext context) : IAppointme
     {
         if (role is RoleNames.Management or RoleNames.QuoteAdministrator)
         {
+            // Management sees submitted quotes (pending their approval).
+            // Quote Administrators see approved quotes (ready for ERP recapture).
+            var statusFilter = role == RoleNames.Management ? "submitted" : "approved";
             var quoteQuery = context.Quotes.AsNoTracking()
-                .Where(x => x.Status == "submitted");
+                .Where(x => x.Status == statusFilter);
             if (role == RoleNames.QuoteAdministrator)
             {
                 quoteQuery = quoteQuery.Where(x => x.QuoteAdministratorId == userId);
@@ -31,8 +34,8 @@ public sealed class AppointmentProvider(MrsQuotesDbContext context) : IAppointme
                 ClientName = x.Client != null ? x.Client.Name : null,
                 SiteAddress = x.SiteAddress,
                 RequestDetails = x.RequestDetails,
-                AppointmentStart = x.CreatedAt,
-                AppointmentEnd = x.CreatedAt,
+                AppointmentStart = x.ApprovedAt ?? x.CreatedAt,
+                AppointmentEnd = x.ApprovedAt ?? x.CreatedAt,
                 Status = x.Status,
                 Subtotal = x.Subtotal,
                 AssessorId = x.AssessorId,

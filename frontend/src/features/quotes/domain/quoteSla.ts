@@ -13,10 +13,11 @@ const GREEN_WINDOW_MINUTES = 60;
 const RED_WINDOW_START_MINUTES = 150;
 const SLA_DEADLINE_MINUTES = 180;
 
-export function getQuoteSla(submittedAt: string, now = Date.now()): QuoteSla {
-  const submittedTime = new Date(submittedAt).getTime();
-  const elapsedMinutes = Number.isFinite(submittedTime)
-    ? Math.max(0, Math.floor((now - submittedTime) / MINUTE_MS))
+export function getQuoteSla(approvedAt: string | null, now = Date.now()): QuoteSla | null {
+  if (!approvedAt) return null;
+  const approvedTime = new Date(approvedAt).getTime();
+  const elapsedMinutes = Number.isFinite(approvedTime)
+    ? Math.max(0, Math.floor((now - approvedTime) / MINUTE_MS))
     : 0;
   const remainingMinutes = Math.max(0, SLA_DEADLINE_MINUTES - elapsedMinutes);
   const breached = elapsedMinutes >= SLA_DEADLINE_MINUTES;

@@ -130,6 +130,10 @@ export const baseApi = createApi({
       query: ({ id, ...body }) => ({ url: `/quotes/${id}/complete`, method: 'PATCH', body }),
       invalidatesTags: (_result, _error, { id }) => [{ type: 'Quotes', id }, 'Quotes', 'Appointments']
     }),
+    approveQuote: build.mutation<OperationResultDto, number>({
+      query: (id) => ({ url: `/quotes/${id}/approve`, method: 'PATCH' }),
+      invalidatesTags: (_result, _error, id) => [{ type: 'Quotes', id }, 'Quotes', 'Appointments']
+    }),
     submitQuote: build.mutation<QuoteCreatedDto, FormData>({
       query: (body) => ({ url: '/quotes', method: 'POST', body }),
       invalidatesTags: ['Quotes', 'Appointments']
@@ -162,6 +166,7 @@ export const {
   useUpdateAppointmentMutation,
   useCancelAppointmentMutation,
   useCompleteQuoteMutation,
+  useApproveQuoteMutation,
   useSubmitQuoteMutation,
   useUpdateQuoteMutation
 } = baseApi;
