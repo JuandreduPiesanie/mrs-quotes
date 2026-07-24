@@ -5,9 +5,25 @@ const SESSION_KEY = 'mrs-session';
 export type SessionUser = UserSessionDto;
 export type Session = AuthResultDto;
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    return typeof decoded.exp === 'number' && Date.now() >= decoded.exp * 1000;
+  } catch {
+    return true;
+  }
+}
+
 export function readSession(): Session | null {
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') as Session | null;
+    if (!session) return null;
+    if (isTokenExpired(session.token)) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return session;
   } catch {
     localStorage.removeItem(SESSION_KEY);
     return null;

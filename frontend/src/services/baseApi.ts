@@ -1,4 +1,6 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
+import { sessionEnded } from '../features/auth/authSlice';
+import { clearSession } from './sessionService';
 import type { ExistingQuote, PriceItem, Trade } from '../features/quotes/domain/quoteTypes';
 import type {
   AppointmentDto,
@@ -22,16 +24,30 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: API_URL,
+  prepareHeaders(headers, { getState }) {
+    const token = (getState() as { auth: { session: { token: string } | null } }).auth.session?.token;
+    if (token) headers.set('authorization', `Bearer ${token}`);
+    return headers;
+  }
+});
+
+const baseQueryWithReauth: BaseQueryFn<FetchArgs | string, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
+  const result = await rawBaseQuery(args, api, extraOptions);
+  if (result.error?.status === 401) {
+    const url = typeof args === 'string' ? args : args.url;
+    if (!url.startsWith('/auth/')) {
+      clearSession();
+      api.dispatch(sessionEnded());
+    }
+  }
+  return result;
+};
+
 export const baseApi = createApi({
   reducerPath: 'mrsApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_URL,
-    prepareHeaders(headers, { getState }) {
-      const token = (getState() as { auth: { session: { token: string } | null } }).auth.session?.token;
-      if (token) headers.set('authorization', `Bearer ${token}`);
-      return headers;
-    }
-  }),
+  baseQuery: baseQueryWithReauth,
   tagTypes: ['Appointments', 'PriceItems', 'Quotes', 'Users'],
   endpoints: (build) => ({
     login: build.mutation<AuthResultDto, LoginRequestDto>({

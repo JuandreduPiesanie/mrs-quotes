@@ -94,7 +94,7 @@ public sealed class AuthenticationProvider(MrsQuotesDbContext context, IConfigur
             issuer,
             audience,
             claims,
-            expires: DateTime.UtcNow.AddHours(12),
+            expires: DateTime.UtcNow.AddHours(1),
             signingCredentials: credentials);
 
         return new AuthResult
