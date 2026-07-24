@@ -10,7 +10,6 @@ import { Login } from '../features/auth/LoginPage';
 import { clearSession, writeSession, type Session } from '../services/sessionService';
 import { baseApi } from '../services/baseApi';
 import { AppRoutes } from './AppRoutes';
-import { PwaInstallAction } from '../shared/pwa/PwaInstallAction';
 
 export default function App() {
   const dispatch = useAppDispatch();
@@ -32,12 +31,7 @@ export default function App() {
     navigate('/calendar', { replace: true });
   }
 
-  if (!session) return (
-    <>
-      <Login onLogin={saveSession} />
-      <PwaInstallAction />
-    </>
-  );
+  if (!session) return <Login onLogin={saveSession} />;
 
   const role = session.user.role;
   const {
@@ -89,7 +83,6 @@ export default function App() {
       <main>
         <AppRoutes role={role} />
       </main>
-      <PwaInstallAction />
     </div>
   );
 }
